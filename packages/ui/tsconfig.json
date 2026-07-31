@@ -1,0 +1,5 @@
+{
+  "extends": "@chatter/typescript-config/nextjs.json",
+  "compilerOptions": { "noEmit": true },
+  "include": ["src"]
+}

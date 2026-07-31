@@ -1,0 +1,25 @@
+{
+  "cookies": [
+    {
+      "name": "chatter_session",
+      "value": "9dc9eb2f3d8abaae7798dc37b62c76bf2c253de7d2d8da45fe8071995213733c",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1786700149.345853,
+      "httpOnly": true,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "chatter_csrf",
+      "value": "bd64474ba436214f446b4ad29d8b27ee",
+      "domain": "localhost",
+      "path": "/",
+      "expires": 1786700149.345977,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": []
+}

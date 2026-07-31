@@ -1,0 +1,22 @@
+{
+  "name": "@chatter/storage",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.940.0",
+    "@aws-sdk/s3-request-presigner": "^3.940.0",
+    "@chatter/config": "workspace:*"
+  },
+  "devDependencies": {
+    "@chatter/eslint-config": "workspace:*",
+    "@chatter/typescript-config": "workspace:*",
+    "typescript": "^5.9.3"
+  }
+}

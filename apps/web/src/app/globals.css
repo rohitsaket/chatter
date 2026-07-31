@@ -1,0 +1,52 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+}
+
+button {
+  font-family: inherit;
+}
+
+input {
+  font-family: inherit;
+}
+
+.hoverable:hover {
+  background: var(--hover);
+}
+
+.hoverable-sel:hover {
+  background: var(--sel);
+}
+
+.hover-border:hover {
+  border-color: var(--p300) !important;
+}
+
+.hover-p700:hover {
+  background: var(--p700) !important;
+}
+
+.hover-dim:hover {
+  filter: brightness(1.1);
+}
+
+.hover-wash:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.hover-wash-strong:hover {
+  background: rgba(16, 19, 34, 0.75) !important;
+}

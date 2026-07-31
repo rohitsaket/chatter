@@ -1,0 +1,72 @@
+/* Chatter design tokens — transcribed 1:1 from the Claude Design prototype
+   (Chatter.dc.html <style> block) so the ported UI is pixel-identical. */
+
+:root, body {
+  --bg: #ffffff;
+  --bg-subtle: #fbfaff;
+  --surface: #ffffff;
+  --muted: #f8f7fc;
+  --hover: #f7f3ff;
+  --sel: #f2ebff;
+  --p100: #eee5ff;
+  --p200: #decaff;
+  --p300: #c6a5ff;
+  --p500: #8950f5;
+  --p600: #7137e8;
+  --p700: #5e28c7;
+  --text: #171525;
+  --text2: #616677;
+  --text3: #9297a8;
+  --border: #e7e8ef;
+  --border2: #d6d8e2;
+  --good: #22b967;
+  --warn: #f3a622;
+  --bad: #ef4457;
+  --bubble-out: #f2ebff;
+  --shadow: 0 1px 2px rgba(23, 21, 37, 0.05);
+}
+
+body[data-theme="dark"] {
+  --bg: #131120;
+  --bg-subtle: #17141f;
+  --surface: #1b1828;
+  --muted: #201c2e;
+  --hover: #241f36;
+  --sel: #2c2347;
+  --p100: #2c2347;
+  --p200: #3b2d63;
+  --text: #f0eef8;
+  --text2: #a5a1b8;
+  --text3: #6f6b84;
+  --border: #282438;
+  --border2: #37324c;
+  --bubble-out: #31265280;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+body[data-accent="blue"]   { --p500:#3d78f3; --p600:#2e63d8; --p700:#2450b3; --sel:#eaf1ff; --p100:#e3edff; --hover:#f3f7ff; --bubble-out:#eaf1ff; }
+body[data-accent="teal"]   { --p500:#14b8c4; --p600:#0e98a5; --p700:#0b7d88; --sel:#e4f8fa; --p100:#dcf5f7; --hover:#f0fbfc; --bubble-out:#e4f8fa; }
+body[data-accent="green"]  { --p500:#22b967; --p600:#189a54; --p700:#128045; --sel:#e6f8ee; --p100:#ddf5e8; --hover:#f1fbf5; --bubble-out:#e6f8ee; }
+body[data-accent="orange"] { --p500:#f38922; --p600:#d9731a; --p700:#b55e14; --sel:#fdf1e4; --p100:#fdecd8; --hover:#fef8f0; --bubble-out:#fdf1e4; }
+body[data-accent="rose"]   { --p500:#ef4470; --p600:#d42e5b; --p700:#b1244b; --sel:#fdebf0; --p100:#fde4ec; --hover:#fef5f8; --bubble-out:#fdebf0; }
+
+body[data-theme="dark"][data-accent="blue"]   { --sel:#1e2a4a; --p100:#1e2a4a; --hover:#1a2338; --bubble-out:#1e2a4a; }
+body[data-theme="dark"][data-accent="teal"]   { --sel:#123a3f; --p100:#123a3f; --hover:#122e32; --bubble-out:#123a3f; }
+body[data-theme="dark"][data-accent="green"]  { --sel:#153a27; --p100:#153a27; --hover:#132e21; --bubble-out:#153a27; }
+body[data-theme="dark"][data-accent="orange"] { --sel:#3f2c12; --p100:#3f2c12; --hover:#322411; --bubble-out:#3f2c12; }
+body[data-theme="dark"][data-accent="rose"]   { --sel:#421627; --p100:#421627; --hover:#341320; --bubble-out:#421627; }
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+a { color: var(--p600); text-decoration: none; }
+a:hover { color: var(--p700); }
+
+@keyframes ct-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+@keyframes ct-ring { 0% { transform: scale(1); opacity: 0.6; } 100% { transform: scale(1.8); opacity: 0; } }
+@keyframes ct-progress { from { width: 0%; } to { width: 100%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}

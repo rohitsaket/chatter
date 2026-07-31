@@ -1,0 +1,9 @@
+{
+  "extends": "@chatter/typescript-config/nest.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src",
+    "baseUrl": "."
+  },
+  "include": ["src"]
+}
