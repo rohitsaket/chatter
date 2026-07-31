@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FileDto } from "@chatter/contracts";
 import { Avatar } from "@chatter/ui";
 import { api, API_URL } from "@/lib/api";
-import { fileModified, formatBytes, listTime } from "@/lib/format";
+import { fileModified, formatBytes } from "@/lib/format";
 import { useFile, useFiles } from "@/lib/queries";
 import { CloseIcon, SearchIcon, SendIcon, UploadIcon } from "../icons";
 

@@ -5,6 +5,7 @@
  */
 import { Worker, Queue } from "bullmq";
 import Redis from "ioredis";
+import { Emitter } from "@socket.io/redis-emitter";
 import { createPrisma } from "@chatter/database";
 import { createLogger } from "@chatter/logger";
 import { loadEnv } from "@chatter/config";
@@ -15,26 +16,16 @@ const env = loadEnv();
 const logger = createLogger("worker");
 const prisma = createPrisma();
 
-/** Publish a realtime event through the API's Socket.IO Redis adapter. */
-const redisPub = new Redis(env.REDIS_URL);
-function emitToRoom(room: string, event: string, payload: unknown): void {
-  // socket.io-redis-adapter message format v8: notify all nodes to emit.
-  const packet = JSON.stringify([
-    "emit",
-    { rooms: [room], except: [], flags: {} },
-    { type: 2, data: [event, payload], nsp: "/" },
-  ]);
-  void packet; // The adapter protocol is msgpack-encoded and internal; instead of
-  // reimplementing it we store an outbox row that the API delivers (see below).
-}
+// Emit realtime events through the API's Socket.IO Redis adapter.
+const emitter = new Emitter(new Redis(env.REDIS_URL));
 
 async function handleNotification(job: NotificationJob): Promise<void> {
   if (job.kind === "fanout") {
     const n = await prisma.notification.findUnique({ where: { id: job.notificationId } });
     if (!n) return; // deleted before delivery — safe no-op
-    await prisma.outboxEvent.create({
-      data: { topic: RT.notificationCreated, payload: { room: rooms.user(n.userId), notificationId: n.id } },
-    });
+    emitter.to(rooms.user(n.userId)).emit(RT.notificationCreated, { notificationId: n.id });
+    const count = await prisma.notification.count({ where: { userId: n.userId, readAt: null, archivedAt: null } });
+    emitter.to(rooms.user(n.userId)).emit(RT.notificationCount, { count });
   }
 }
 
@@ -65,15 +56,23 @@ async function handleMaintenance(job: MaintenanceJob): Promise<void> {
       break;
     }
     case "process-outbox": {
-      // Deliver undelivered outbox rows (realtime fan-out is done by the API
-      // when it's the producer; this catches rows written by other producers).
+      // Deliver outbox rows through the Socket.IO Redis adapter. The API also
+      // emits directly on its own low-latency path; clients dedupe by id, so
+      // at-least-once delivery here is safe.
       const rows = await prisma.outboxEvent.findMany({
         where: { processedAt: null },
         orderBy: { createdAt: "asc" },
         take: 100,
       });
       for (const row of rows) {
-        emitToRoom("", row.topic, row.payload);
+        const payload = row.payload as Record<string, unknown>;
+        const room =
+          typeof payload.room === "string"
+            ? payload.room
+            : typeof payload.conversationId === "string"
+              ? rooms.conversation(payload.conversationId)
+              : null;
+        if (room) emitter.to(room).emit(row.topic, payload);
         await prisma.outboxEvent.update({ where: { id: row.id }, data: { processedAt: new Date() } });
       }
       break;

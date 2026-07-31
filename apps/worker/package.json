@@ -16,7 +16,8 @@
     "@chatter/notifications": "workspace:*",
     "@chatter/realtime": "workspace:*",
     "bullmq": "^5.66.5",
-    "ioredis": "^5.9.1"
+    "ioredis": "^5.9.1",
+    "@socket.io/redis-emitter": "^5.1.0"
   },
   "devDependencies": {
     "@chatter/eslint-config": "workspace:*",

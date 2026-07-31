@@ -53,7 +53,7 @@ export function StatusModule() {
       viewedRef.current.add(current.id);
       viewMut.mutate(current.id);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // (deps intentionally limited)
   }, [current?.id]);
 
   // Auto-advance every 5s.

@@ -2,7 +2,7 @@
 import Link from "next/link";
 import * as React from "react";
 import type { MeDto } from "@chatter/contracts";
-import { Avatar, Badge } from "@chatter/ui";
+import { Avatar } from "@chatter/ui";
 import { useAdminStorage } from "@/lib/queries";
 import { formatBytes } from "@/lib/format";
 import {

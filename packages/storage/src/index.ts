@@ -88,5 +88,5 @@ export function createStorage(env: Env = loadEnv()): StorageDriver {
 }
 
 export function newStorageKey(orgId: string, filename: string): string {
-  return `${orgId}/${randomUUID()}/${filename.replace(/[^\w.\-]/g, "_")}`;
+  return `${orgId}/${randomUUID()}/${filename.replace(/[^\w.-]/g, "_")}`;
 }

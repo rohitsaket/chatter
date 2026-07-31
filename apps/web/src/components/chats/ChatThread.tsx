@@ -43,7 +43,7 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
 
   React.useEffect(() => {
     if (conv.unreadCount > 0) markRead.mutate(conv.slug ?? conv.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // (deps intentionally limited)
   }, [conv.id, conv.unreadCount]);
 
   React.useEffect(() => {

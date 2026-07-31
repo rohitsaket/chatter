@@ -2,20 +2,20 @@
   "cookies": [
     {
       "name": "chatter_session",
-      "value": "9dc9eb2f3d8abaae7798dc37b62c76bf2c253de7d2d8da45fe8071995213733c",
+      "value": "b35c9c145b0032a9bb0264d8164dfcc0091cb460325516f7dafa9227da6814b9",
       "domain": "localhost",
       "path": "/",
-      "expires": 1786700149.345853,
+      "expires": 1786700708.60885,
       "httpOnly": true,
       "secure": false,
       "sameSite": "Lax"
     },
     {
       "name": "chatter_csrf",
-      "value": "bd64474ba436214f446b4ad29d8b27ee",
+      "value": "ff2a30856e3326766ec699681c22c90f",
       "domain": "localhost",
       "path": "/",
-      "expires": 1786700149.345977,
+      "expires": 1786700708.608997,
       "httpOnly": false,
       "secure": false,
       "sameSite": "Lax"

@@ -1,7 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { ConversationDto, ParticipantDto } from "@chatter/contracts";
 import { RT } from "@chatter/realtime";
-import type { Conversation, ConversationParticipant, Group, Message, User } from "@chatter/database";
+import type { Conversation, ConversationParticipant, Group, User } from "@chatter/database";
 import { PrismaService } from "../../common/prisma.service";
 import type { AuthedUser } from "../../common/session.service";
 import { RealtimeGateway } from "../../realtime/realtime.gateway";
