@@ -64,6 +64,15 @@ async function loginAs(email: string): Promise<Client> {
 }
 
 beforeAll(async () => {
+  // Reset the dedicated test database (drop schema + reapply migrations)
+  // rather than migrate-deploy onto whatever state the last run left behind:
+  // the suite's assertions depend on pristine seed data, and messages and
+  // read-state mutate across runs. Scoped to chatter_test by construction.
+  const { PrismaClient } = await import("@chatter/database");
+  const admin = new PrismaClient({ datasources: { db: { url: TEST_DB } } });
+  await admin.$executeRawUnsafe("DROP SCHEMA IF EXISTS public CASCADE");
+  await admin.$executeRawUnsafe("CREATE SCHEMA public");
+  await admin.$disconnect();
   execSync("npx prisma migrate deploy", {
     cwd: `${__dirname}/../../../packages/database`,
     env: { ...process.env, DATABASE_URL: TEST_DB },
@@ -281,5 +290,55 @@ describe("health", () => {
     const res = await fetch(`${baseUrl}/health`);
     const json = await res.json();
     expect(json.status).toBe("ok");
+  });
+});
+
+describe("websocket session revocation", () => {
+  it("disconnects a live socket when its session is revoked via logout", async () => {
+    // Fresh client (dedicated session): a socket authenticated with that
+    // session must be force-disconnected by the server on logout.
+    const c = new Client();
+    const login = await c.post("/api/v1/auth/login", { email: "emily.davis@acmecorp.com", password: "Chatter!Demo1" });
+    expect(login.status).toBe(200);
+
+    const { io } = await import("socket.io-client");
+    const socket = io(baseUrl, {
+      path: "/socket.io",
+      transports: ["websocket"],
+      extraHeaders: { cookie: c.jar.header() },
+    });
+    await new Promise<void>((resolve, reject) => {
+      socket.on("connect", () => resolve());
+      socket.on("connect_error", (e) => reject(e));
+      setTimeout(() => reject(new Error("socket connect timeout")), 5000);
+    });
+    expect(socket.connected).toBe(true);
+
+    const disconnected = new Promise<string>((resolve) => socket.on("disconnect", (reason) => resolve(reason)));
+    const out = await c.post("/api/v1/auth/logout");
+    expect(out.status).toBe(200);
+
+    const reason = await Promise.race([
+      disconnected,
+      new Promise<string>((_, reject) => setTimeout(() => reject(new Error("socket was not disconnected after logout")), 5000)),
+    ]);
+    expect(reason).toBe("io server disconnect");
+    socket.close();
+  });
+
+  it("rejects an unauthenticated socket connection", async () => {
+    const { io } = await import("socket.io-client");
+    const socket = io(baseUrl, { path: "/socket.io", transports: ["websocket"] });
+    const outcome = await new Promise<string>((resolve) => {
+      socket.on("connect", () => {
+        // Server accepts the transport then must immediately drop it.
+        socket.on("disconnect", () => resolve("disconnected"));
+        setTimeout(() => resolve(socket.connected ? "still-connected" : "disconnected"), 2000);
+      });
+      socket.on("connect_error", () => resolve("rejected"));
+      setTimeout(() => resolve("timeout"), 5000);
+    });
+    expect(["disconnected", "rejected"]).toContain(outcome);
+    socket.close();
   });
 });

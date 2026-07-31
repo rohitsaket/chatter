@@ -10,3 +10,6 @@ coverage/
 /apps/web/playwright-report/
 /apps/web/test-results/
 /var/
+/apps/web/e2e/.auth/
+*.tsbuildinfo
+dump.rdb

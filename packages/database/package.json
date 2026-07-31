@@ -10,7 +10,7 @@
     "lint": "eslint src",
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
-    "db:seed": "node dist/seed.js",
+    "db:seed": "node --env-file-if-exists=../../.env dist/seed.js",
     "db:generate": "prisma generate"
   },
   "dependencies": {

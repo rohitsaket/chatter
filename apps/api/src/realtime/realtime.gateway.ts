@@ -43,7 +43,8 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
     try {
       const token = parseCookie(socket.handshake.headers.cookie, SESSION_COOKIE);
       const user = await this.sessions.resolve(token);
-      (socket.data as { user: AuthedUser }).user = user;
+      (socket.data as { user: AuthedUser; sessionToken: string }).user = user;
+      (socket.data as { user: AuthedUser; sessionToken: string }).sessionToken = token!;
       await socket.join([rooms.user(user.userId), rooms.org(user.organizationId)]);
 
       // Join all conversation rooms the user participates in.
@@ -115,5 +116,20 @@ export class RealtimeGateway implements OnGatewayConnection, OnGatewayDisconnect
   async joinUserToConversation(userId: string, conversationId: string): Promise<void> {
     const sockets = await this.server.in(rooms.user(userId)).fetchSockets();
     for (const s of sockets) await s.join(rooms.conversation(conversationId));
+  }
+
+  /**
+   * Session revocation must revoke live WebSocket access too: a logged-out
+   * client may not keep receiving room events. Disconnects the sockets bound
+   * to the revoked session token, or every socket of the user when no token
+   * is given (logout-all). Works cluster-wide via fetchSockets().
+   */
+  async disconnectRevokedSession(userId: string, sessionToken?: string): Promise<void> {
+    if (!this.server) return;
+    const sockets = await this.server.in(rooms.user(userId)).fetchSockets();
+    for (const s of sockets) {
+      const data = s.data as { sessionToken?: string };
+      if (!sessionToken || data.sessionToken === sessionToken) s.disconnect(true);
+    }
   }
 }

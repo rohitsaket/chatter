@@ -347,9 +347,41 @@ async function main() {
       skipDuplicates: true,
     });
 
+    // Michael DM: two unread messages (prototype badge 2), newest is the
+    // lunch message so the list preview matches the prototype.
+    await msg(cMichael, mb.id, "Did you get a chance to look at the product specs?", 50, { state: "DELIVERED" });
+
     // Other list previews
     const mkConv = mkt.conv;
+    // Marketing Team: five unread from others (prototype badge 5), newest from
+    // Emily so the preview reads "Great work on the campaign visuals!".
+    await msg(mkConv, users.om!.id, "Campaign brief is up — feedback welcome before Friday.", 180);
+    await msg(mkConv, sj.id, "I'll review the media plan this afternoon.", 178);
+    await msg(mkConv, users.mt!.id, "Sales enablement deck is linked in the files tab.", 172);
+    await msg(mkConv, users.om!.id, "Updated the launch timeline with the new dates.", 168);
     await msg(mkConv, users.ed!.id, "Great work on the campaign visuals!", 163);
+
+    // Project Phoenix: one unread from Michael, then John's own newest message
+    // so the preview reads "You: Uploaded 2 files" (prototype).
+    const phoenixConv = await prisma.conversation.findUnique({
+      where: { organizationId_slug: { organizationId: org.id, slug: "phoenix" } },
+    });
+    if (phoenixConv) {
+      await msg(phoenixConv, mb.id, "Phoenix build is green again — thanks for the quick fixes.", 60 * 21);
+      await msg(phoenixConv, jd.id, "Uploaded 2 files", 60 * 20);
+    }
+
+    // Friends Group: four unread from others (prototype badge 4), newest text
+    // matches the prototype preview "See you all this weekend!".
+    const friendsConv = await prisma.conversation.findUnique({
+      where: { organizationId_slug: { organizationId: org.id, slug: "friends" } },
+    });
+    if (friendsConv) {
+      await msg(friendsConv, al.id, "Anyone up for hiking on Saturday?", 60 * 27);
+      await msg(friendsConv, mb.id, "Count me in — weather looks great.", 60 * 26 + 30);
+      await msg(friendsConv, al.id, "I'll book the cabin for Saturday night.", 60 * 26);
+      await msg(friendsConv, mb.id, "See you all this weekend!", 60 * 25 + 30);
+    }
     await msg((await dm("sarah", "sj", 60)), sj.id, "Thanks for the quick response!", 58);
     await msg((await dm("david", "dw", 60 * 24)), dw.id, "Let's catch up tomorrow.", 60 * 23);
     await msg((await dm("james", "ja", 60 * 72)), ja(), "Perfect, thank you!", 60 * 71).catch(() => void 0);
@@ -359,14 +391,24 @@ async function main() {
     return users.ja!.id;
   }
 
-  // Unread positioning: John has read everything older than N minutes per conversation
-  const unreadPlan: Record<string, number> = { alice: 33, michael: 50, mkt: 170, design: 78, phoenix: 999999, friends: 999999 };
-  for (const [slug, mins] of Object.entries(unreadPlan)) {
+  // Unread positioning: the K newest messages from other senders are unread for
+  // John (prototype badge counts). Anchored to message timestamps, not the
+  // wall clock, so re-running the seed restores the same unread state even
+  // though messages keep their original createdAt.
+  const unreadPlan: Record<string, number> = { alice: 3, michael: 2, mkt: 5, design: 4, phoenix: 1, friends: 4 };
+  for (const [slug, count] of Object.entries(unreadPlan)) {
     const conv = await prisma.conversation.findUnique({ where: { organizationId_slug: { organizationId: org.id, slug } } });
     if (!conv) continue;
+    const fromOthers = await prisma.message.findMany({
+      where: { conversationId: conv.id, deletedAt: null, senderId: { not: jd.id } },
+      orderBy: { createdAt: "desc" },
+      take: count,
+      select: { createdAt: true },
+    });
+    const kth = fromOthers[count - 1];
     await prisma.conversationParticipant.updateMany({
       where: { conversationId: conv.id, userId: jd.id },
-      data: { lastReadAt: minsAgo(mins) },
+      data: { lastReadAt: kth ? new Date(kth.createdAt.getTime() - 1000) : null },
     });
   }
 

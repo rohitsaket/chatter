@@ -5,6 +5,7 @@ import { loginBody, registerBody, type LoginBody, type RegisterBody } from "@cha
 import { Public } from "../../common/session.guard";
 import { SESSION_COOKIE, SessionService } from "../../common/session.service";
 import { ZodPipe } from "../../common/zod.pipe";
+import { RealtimeGateway } from "../../realtime/realtime.gateway";
 import { AuthService } from "./auth.service";
 
 @Controller("auth")
@@ -12,6 +13,7 @@ export class AuthController {
   constructor(
     private readonly auth: AuthService,
     private readonly sessions: SessionService,
+    private readonly realtime: RealtimeGateway,
   ) {}
 
   @Public()
@@ -44,7 +46,10 @@ export class AuthController {
   @HttpCode(200)
   @Post("logout")
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    await this.sessions.revoke(req.cookies?.[SESSION_COOKIE], res);
+    const user = (req as Request & { user: { userId: string } }).user;
+    const token = req.cookies?.[SESSION_COOKIE];
+    await this.sessions.revoke(token, res);
+    await this.realtime.disconnectRevokedSession(user.userId, token);
     return { ok: true };
   }
 
@@ -54,6 +59,7 @@ export class AuthController {
     const user = (req as Request & { user: { userId: string } }).user;
     await this.sessions.revokeAll(user.userId);
     await this.sessions.revoke(req.cookies?.[SESSION_COOKIE], res);
+    await this.realtime.disconnectRevokedSession(user.userId);
     return { ok: true };
   }
 }
