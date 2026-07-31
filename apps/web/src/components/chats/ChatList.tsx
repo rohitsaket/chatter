@@ -6,6 +6,7 @@ import { Avatar } from "@chatter/ui";
 import { listTime } from "@/lib/format";
 import { useUiStore } from "@/lib/store";
 import { FilterIcon, SearchIcon } from "../icons";
+import { DotsMenu } from "../common/Menu";
 
 export function ChatList({ conversations, selected }: { conversations: ConversationDto[]; selected: string | null }) {
   const router = useRouter();
@@ -29,12 +30,16 @@ export function ChatList({ conversations, selected }: { conversations: Conversat
             style={{ border: "none", outline: "none", background: "transparent", font: "inherit", fontSize: 13, color: "var(--text)", width: "100%" }}
           />
         </div>
-        <div
-          className="hoverable"
-          style={{ width: 38, height: 38, borderRadius: 11, border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", cursor: "pointer" }}
-        >
-          <FilterIcon />
-        </div>
+        <DotsMenu
+          size={38}
+          trigger={<FilterIcon />}
+          triggerStyle={{ borderRadius: 11, border: "1px solid var(--border)", color: "var(--text2)" }}
+          items={[
+            { label: "All chats", onClick: () => setChatTab("All") },
+            { label: "Unread only", onClick: () => setChatTab("Unread") },
+            { label: "Favorites only", onClick: () => setChatTab("Favorites") },
+          ]}
+        />
       </div>
       <div style={{ display: "flex", gap: 18, padding: "12px 18px 0", borderBottom: "1px solid var(--border)", fontSize: 13.5, fontWeight: 600, color: "var(--text2)" }}>
         {(["All", "Unread", "Favorites"] as const).map((tab) => (

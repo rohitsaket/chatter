@@ -1,11 +1,13 @@
 "use client";
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { FileDto } from "@chatter/contracts";
 import { Avatar } from "@chatter/ui";
 import { api, API_URL } from "@/lib/api";
 import { fileModified, formatBytes } from "@/lib/format";
 import { useFile, useFiles } from "@/lib/queries";
+import { DotsMenu } from "../common/Menu";
 import { CloseIcon, SearchIcon, SendIcon, UploadIcon } from "../icons";
 
 const GRID = "2.4fr .7fr .7fr 1.2fr .6fr 1.2fr .6fr .6fr";
@@ -34,10 +36,25 @@ function extLabel(type: string): string {
   return type === "SKETCH" ? "◆" : type.slice(0, 3);
 }
 
+type FileCat = "All Files" | "Documents" | "Images" | "Videos" | "Audio" | "Favorites";
+type FileSort = "name-asc" | "name-desc" | "modified-desc" | "modified-asc";
+
+const CAT_TYPES: Record<string, string[]> = {
+  Documents: ["PDF", "DOCX", "XLSX", "PPTX", "DOC", "XLS", "PPT"],
+  Images: ["PNG", "JPG"],
+  Videos: ["MP4"],
+  Audio: ["MP3"],
+};
+
 export function FilesModule() {
+  const router = useRouter();
   const [q, setQ] = React.useState("");
   const files = useFiles(q || undefined);
   const [selId, setSelId] = React.useState<string | null>(null);
+  const [detailClosed, setDetailClosed] = React.useState(false);
+  const [cat, setCat] = React.useState<FileCat>("All Files");
+  const [workspace, setWorkspace] = React.useState<string | null>(null);
+  const [sort, setSort] = React.useState<FileSort>("modified-desc");
   const [isMobile, setIsMobile] = React.useState<boolean | null>(null);
   const qc = useQueryClient();
   const uploadRef = React.useRef<HTMLInputElement>(null);
@@ -49,8 +66,17 @@ export function FilesModule() {
     return () => window.removeEventListener("resize", check);
   }, []);
 
-  const rows = files.data ?? [];
-  const effectiveSel = selId ?? rows[0]?.id ?? null;
+  const all = files.data ?? [];
+  const rows = all
+    .filter((f) => (cat === "Favorites" ? f.starred : cat === "All Files" ? true : (CAT_TYPES[cat] ?? []).includes(f.type)))
+    .filter((f) => !workspace || f.sharedIn === workspace)
+    .sort((a, b) =>
+      sort === "name-asc" ? a.name.localeCompare(b.name)
+      : sort === "name-desc" ? b.name.localeCompare(a.name)
+      : sort === "modified-asc" ? a.updatedAt.localeCompare(b.updatedAt)
+      : b.updatedAt.localeCompare(a.updatedAt),
+    );
+  const effectiveSel = detailClosed ? null : (selId ?? rows[0]?.id ?? null);
   const detail = useFile(effectiveSel);
 
   const star = useMutation({
@@ -58,6 +84,14 @@ export function FilesModule() {
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["files"] });
       void qc.invalidateQueries({ queryKey: ["file"] });
+    },
+  });
+
+  const trash = useMutation({
+    mutationFn: (id: string) => api<{ ok: true }>(`/files/${id}`, { method: "DELETE" }),
+    onSuccess: () => {
+      setSelId(null);
+      void qc.invalidateQueries({ queryKey: ["files"] });
     },
   });
 
@@ -78,7 +112,12 @@ export function FilesModule() {
     return (
       <div style={{ padding: 8 }}>
         {rows.map((f) => (
-          <div key={f.id} className="hoverable" style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, cursor: "pointer" }}>
+          <a
+            key={f.id}
+            href={`${API_URL}/api/v1/files/${f.id}/download`}
+            className="hoverable"
+            style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, borderRadius: 12, cursor: "pointer", color: "inherit", textDecoration: "none" }}
+          >
             <div style={{ width: 42, height: 42, borderRadius: 11, background: iconBg(f.type), display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 9, fontWeight: 800, flexShrink: 0 }}>
               {extLabel(f.type)}
             </div>
@@ -89,52 +128,68 @@ export function FilesModule() {
               </div>
             </div>
             <span style={{ color: f.status === "READY" ? "var(--good)" : "var(--text3)" }}>{f.status === "READY" ? "✓" : "☁"}</span>
-          </div>
+          </a>
         ))}
       </div>
     );
   }
 
-  const totalBytes = rows.reduce((a, f) => a + f.sizeBytes, 0);
-  const cats = [
-    { name: "All Files", icon: "▦", count: rows.length, active: true },
-    { name: "Documents", icon: "📄", count: rows.filter((f) => ["PDF", "DOCX", "XLSX", "PPTX"].includes(f.type)).length },
-    { name: "Images", icon: "🖼", count: rows.filter((f) => ["PNG", "JPG"].includes(f.type)).length },
-    { name: "Videos", icon: "🎞", count: rows.filter((f) => f.type === "MP4").length },
-    { name: "Audio", icon: "🎵", count: rows.filter((f) => f.type === "MP3").length },
-    { name: "Favorites", icon: "☆", count: rows.filter((f) => f.starred).length },
+  const totalBytes = all.reduce((a, f) => a + f.sizeBytes, 0);
+  const cats: { name: FileCat; icon: string; count: number }[] = [
+    { name: "All Files", icon: "▦", count: all.length },
+    { name: "Documents", icon: "📄", count: all.filter((f) => CAT_TYPES.Documents!.includes(f.type)).length },
+    { name: "Images", icon: "🖼", count: all.filter((f) => CAT_TYPES.Images!.includes(f.type)).length },
+    { name: "Videos", icon: "🎞", count: all.filter((f) => CAT_TYPES.Videos!.includes(f.type)).length },
+    { name: "Audio", icon: "🎵", count: all.filter((f) => CAT_TYPES.Audio!.includes(f.type)).length },
+    { name: "Favorites", icon: "☆", count: all.filter((f) => f.starred).length },
   ];
+  const workspaces = [...new Set(all.map((f) => f.sharedIn).filter((s): s is string => !!s))].slice(0, 6);
 
   return (
     <>
       <div style={{ width: 238, flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)", background: "var(--bg)", overflowY: "auto" }}>
         <div style={{ padding: "16px 18px 12px", fontSize: 16, fontWeight: 800 }}>Files</div>
         <div style={{ padding: "0 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {cats.map((fc) => (
-            <div
-              key={fc.name}
-              className={fc.active ? undefined : "hoverable"}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "8.5px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: fc.active ? "var(--sel)" : "transparent", color: fc.active ? "var(--p600)" : "var(--text)" }}
-            >
-              <span style={{ opacity: 0.8 }}>{fc.icon}</span>
-              <span style={{ flex: 1 }}>{fc.name}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 99, padding: "2px 8px", background: fc.active ? "var(--p600)" : "var(--muted)", color: fc.active ? "#fff" : "var(--text2)" }}>{fc.count}</span>
-            </div>
-          ))}
+          {cats.map((fc) => {
+            const active = cat === fc.name;
+            return (
+              <div
+                key={fc.name}
+                className={active ? undefined : "hoverable"}
+                onClick={() => setCat(fc.name)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8.5px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+              >
+                <span style={{ opacity: 0.8 }}>{fc.icon}</span>
+                <span style={{ flex: 1 }}>{fc.name}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, borderRadius: 99, padding: "2px 8px", background: active ? "var(--p600)" : "var(--muted)", color: active ? "#fff" : "var(--text2)" }}>{fc.count}</span>
+              </div>
+            );
+          })}
         </div>
         <div style={{ padding: "16px 18px 6px", fontSize: 11, fontWeight: 700, color: "var(--text3)", letterSpacing: ".06em" }}>MY WORKSPACES</div>
         <div style={{ padding: "0 10px 14px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {[
-            { name: "Marketing Team", icon: "👥", bg: "linear-gradient(135deg,#a873ff,#5e28c7)" },
-            { name: "Product Design", icon: "✏️", bg: "linear-gradient(135deg,#f08fb6,#b34a77)" },
-            { name: "Dev Team", icon: "</>", bg: "linear-gradient(135deg,#43c0a8,#1f7a68)" },
-          ].map((w) => (
-            <div key={w.name} className="hoverable" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5 }}>
-              <div style={{ width: 26, height: 26, borderRadius: 8, background: w.bg, display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>{w.icon}</div>
-              {w.name}
-            </div>
-          ))}
-          <div className="hoverable" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 13.5, color: "var(--p600)" }}>+ Create Workspace</div>
+          {workspaces.map((w, i) => {
+            const bgs = ["linear-gradient(135deg,#a873ff,#5e28c7)", "linear-gradient(135deg,#f08fb6,#b34a77)", "linear-gradient(135deg,#43c0a8,#1f7a68)", "linear-gradient(135deg,#5b8def,#2c4fa3)", "linear-gradient(135deg,#f3a15e,#c26a1f)", "linear-gradient(135deg,#8f9bb3,#4a5670)"];
+            const active = workspace === w;
+            return (
+              <div
+                key={w}
+                className={active ? undefined : "hoverable"}
+                onClick={() => setWorkspace(active ? null : w)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+              >
+                <div style={{ width: 26, height: 26, borderRadius: 8, background: bgs[i % bgs.length], display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>👥</div>
+                {w}
+              </div>
+            );
+          })}
+          <div
+            className="hoverable"
+            onClick={() => router.push("/app/groups")}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 13.5, color: "var(--p600)" }}
+          >
+            + Create Workspace
+          </div>
         </div>
       </div>
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg)", borderRight: "1px solid var(--border)" }}>
@@ -170,10 +225,14 @@ export function FilesModule() {
           </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: GRID, gap: 8, padding: "9px 18px", borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", fontSize: 12, fontWeight: 700, color: "var(--text2)", background: "var(--bg-subtle)" }}>
-          <span>Name ⇅</span>
+          <span onClick={() => setSort(sort === "name-asc" ? "name-desc" : "name-asc")} style={{ cursor: "pointer", userSelect: "none" }}>
+            Name {sort === "name-asc" ? "↑" : sort === "name-desc" ? "↓" : "⇅"}
+          </span>
           <span>Type</span>
           <span>Size</span>
-          <span>Modified ⇅</span>
+          <span onClick={() => setSort(sort === "modified-desc" ? "modified-asc" : "modified-desc")} style={{ cursor: "pointer", userSelect: "none" }}>
+            Modified {sort === "modified-desc" ? "↓" : sort === "modified-asc" ? "↑" : "⇅"}
+          </span>
           <span>Owner</span>
           <span>Shared In</span>
           <span>Status</span>
@@ -186,7 +245,10 @@ export function FilesModule() {
               <div
                 key={f.id}
                 className={isSel ? undefined : "hoverable"}
-                onClick={() => setSelId(f.id)}
+                onClick={() => {
+                  setDetailClosed(false);
+                  setSelId(f.id);
+                }}
                 style={{ display: "grid", gridTemplateColumns: GRID, gap: 8, alignItems: "center", padding: "9px 18px", borderBottom: "1px solid var(--border)", cursor: "pointer", fontSize: 12.5, background: isSel ? "var(--sel)" : "transparent" }}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0 }}>
@@ -212,7 +274,14 @@ export function FilesModule() {
                 </Avatar>
                 <span style={{ color: "var(--text2)" }}>{f.sharedIn ?? "—"}</span>
                 <span style={{ color: f.status === "READY" ? "var(--good)" : "var(--text3)", fontSize: 14 }}>{f.status === "READY" ? "✓" : "☁"}</span>
-                <span style={{ color: "var(--text3)", cursor: "pointer" }}>•••</span>
+                <DotsMenu
+                  trigger={<span style={{ color: "var(--text3)" }}>•••</span>}
+                  items={[
+                    { label: "Download", onClick: () => window.open(`${API_URL}/api/v1/files/${f.id}/download`, "_blank") },
+                    { label: f.starred ? "Remove star" : "Star", onClick: () => star.mutate(f.id) },
+                    { label: "Move to trash", danger: true, onClick: () => trash.mutate(f.id) },
+                  ]}
+                />
               </div>
             );
           })}
@@ -223,7 +292,14 @@ export function FilesModule() {
           </span>
         </div>
       </main>
-      {detail.data && <FileDetail f={detail.data} onStar={() => star.mutate(detail.data!.id)} />}
+      {detail.data && (
+        <FileDetail
+          f={detail.data}
+          onStar={() => star.mutate(detail.data!.id)}
+          onTrash={() => trash.mutate(detail.data!.id)}
+          onClose={() => setDetailClosed(true)}
+        />
+      )}
     </>
   );
 }
@@ -236,9 +312,10 @@ const cellStyle: React.CSSProperties = {
   textOverflow: "ellipsis",
 };
 
-function FileDetail({ f, onStar }: { f: FileDto; onStar: () => void }) {
+function FileDetail({ f, onStar, onTrash, onClose }: { f: FileDto; onStar: () => void; onTrash: () => void; onClose: () => void }) {
   const qc = useQueryClient();
   const [comment, setComment] = React.useState("");
+  const [copied, setCopied] = React.useState(false);
   const commentMut = useMutation({
     mutationFn: (body: string) => api<FileDto>(`/files/${f.id}/comments`, { method: "POST", json: { body } }),
     onSuccess: () => {
@@ -246,13 +323,20 @@ function FileDetail({ f, onStar }: { f: FileDto; onStar: () => void }) {
       void qc.invalidateQueries({ queryKey: ["file", f.id] });
     },
   });
-  void onStar;
+
+  async function copyLink() {
+    // Authenticated download link: works for signed-in members of the org
+    // (files are never exposed through permanent public URLs).
+    await navigator.clipboard.writeText(`${API_URL}/api/v1/files/${f.id}/download`).catch(() => void 0);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  }
 
   return (
     <aside style={{ width: 300, flexShrink: 0, background: "var(--bg)", overflowY: "auto", padding: "0 18px 20px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "16px 0 10px" }}>
         <span style={{ fontSize: 14.5, fontWeight: 800, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-        <span style={{ cursor: "pointer", color: "var(--text2)", display: "flex" }}>
+        <span onClick={onClose} style={{ cursor: "pointer", color: "var(--text2)", display: "flex" }}>
           <CloseIcon size={16} />
         </span>
       </div>
@@ -268,10 +352,23 @@ function FileDetail({ f, onStar }: { f: FileDto; onStar: () => void }) {
         >
           ⬇ Download
         </a>
-        <div className="hoverable" style={{ flex: 1, border: "1px solid var(--border)", fontSize: 13, fontWeight: 700, borderRadius: 10, padding: "9px 0", textAlign: "center", cursor: "pointer", color: "var(--text)" }}>
-          Share
+        <div
+          className="hoverable"
+          onClick={() => void copyLink()}
+          style={{ flex: 1, border: "1px solid var(--border)", fontSize: 13, fontWeight: 700, borderRadius: 10, padding: "9px 0", textAlign: "center", cursor: "pointer", color: copied ? "var(--good)" : "var(--text)" }}
+        >
+          {copied ? "Link copied ✓" : "Share"}
         </div>
-        <div style={{ width: 38, border: "1px solid var(--border)", borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", cursor: "pointer" }}>•••</div>
+        <DotsMenu
+          size={38}
+          trigger={<span>•••</span>}
+          triggerStyle={{ border: "1px solid var(--border)", borderRadius: 10, color: "var(--text2)", height: "auto", alignSelf: "stretch" }}
+          items={[
+            { label: f.starred ? "Remove star" : "Star", onClick: onStar },
+            { label: "Copy link", onClick: () => void copyLink() },
+            { label: "Move to trash", danger: true, onClick: onTrash },
+          ]}
+        />
       </div>
       <div style={{ borderTop: "1px solid var(--border)", marginTop: 14, paddingTop: 12 }}>
         <div style={{ fontSize: 13.5, fontWeight: 800 }}>File Details</div>
@@ -302,7 +399,6 @@ function FileDetail({ f, onStar }: { f: FileDto; onStar: () => void }) {
         <div style={{ borderTop: "1px solid var(--border)", marginTop: 10, paddingTop: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between" }}>
             <span style={{ fontSize: 13.5, fontWeight: 800 }}>Version History</span>
-            <span style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>View all</span>
           </div>
           {f.versions.map((v, i) => (
             <div key={v.version} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 0", fontSize: 12.5 }}>

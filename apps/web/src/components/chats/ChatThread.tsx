@@ -3,6 +3,7 @@ import { useRouter } from "next/navigation";
 import * as React from "react";
 import type { ConversationDto, MessageDto } from "@chatter/contracts";
 import { Avatar } from "@chatter/ui";
+import { API_URL } from "@/lib/api";
 import { clockTime } from "@/lib/format";
 import { useMarkRead, useMessages, useReact, useSendMessage, useVote } from "@/lib/queries";
 import { onTyping, sendTyping } from "@/lib/socket";
@@ -28,17 +29,24 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
   const markRead = useMarkRead();
   const react = useReact();
   const vote = useVote();
-  const { detailOpen, setDetailOpen } = useUiStore();
+  const { detailOpen, setDetailOpen, threadSearch, setThreadSearch } = useUiStore();
   const [draft, setDraft] = React.useState("");
   const [pinHidden, setPinHidden] = React.useState(false);
   const [typers, setTypers] = React.useState<Map<string, string>>(new Map());
   const scrollRef = React.useRef<HTMLDivElement>(null);
+  const attachRef = React.useRef<HTMLInputElement>(null);
   const typingTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const items = React.useMemo(() => messages.data?.items ?? [], [messages.data]);
+  const allItems = React.useMemo(() => messages.data?.items ?? [], [messages.data]);
+  const items = React.useMemo(
+    () => (threadSearch ? allItems.filter((m) => (m.text ?? "").toLowerCase().includes(threadSearch.toLowerCase())) : allItems),
+    [allItems, threadSearch],
+  );
 
   React.useEffect(() => {
     setPinHidden(false);
+    setThreadSearch(null);
+    // (store setter identity is stable; deps intentionally limited)
   }, [conv.id]);
 
   React.useEffect(() => {
@@ -78,6 +86,19 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
     send.mutate({ text });
   }
 
+  async function handleAttach(file: File) {
+    // Real upload through the Files API (lands in the Files module), then a
+    // message pointing at it — the message API itself is text-only today.
+    const csrf = document.cookie.match(/(?:^|;\s*)chatter_csrf=([^;]+)/)?.[1] ?? "";
+    const res = await fetch(`${API_URL}/api/v1/files/upload`, {
+      method: "POST",
+      credentials: "include",
+      headers: { "x-file-name": encodeURIComponent(file.name), "content-type": file.type || "application/octet-stream", "x-csrf-token": csrf },
+      body: file,
+    });
+    if (res.ok) send.mutate({ text: `📎 Shared a file: ${file.name}` });
+  }
+
   const showPin = conv.pinnedMessage && !pinHidden;
   const typingNames = [...typers.values()];
 
@@ -94,10 +115,20 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
               {typingNames.length ? `${typingNames.join(", ")} typing…` : conv.subtitle}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 4, color: "var(--text2)" }}>
+          <div style={{ display: "flex", gap: 4, color: "var(--text2)", alignItems: "center" }}>
+            {threadSearch !== null && (
+              <input
+                autoFocus
+                value={threadSearch}
+                onChange={(e) => setThreadSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Escape" && setThreadSearch(null)}
+                placeholder="Search in conversation..."
+                style={{ border: "1px solid var(--border)", borderRadius: 9, padding: "7px 11px", font: "inherit", fontSize: 12.5, color: "var(--text)", background: "var(--muted)", outline: "none", width: 190 }}
+              />
+            )}
             {[
-              { icon: <SearchIcon size={17} />, key: "search" },
-              { icon: <PhoneIcon size={17} strokeWidth={1.7} />, key: "phone" },
+              { icon: <SearchIcon size={17} />, key: "search", onClick: () => setThreadSearch(threadSearch === null ? "" : null) },
+              { icon: <PhoneIcon size={17} strokeWidth={1.7} />, key: "phone", onClick: () => router.push("/app/calls") },
               { icon: <VideoIcon />, key: "video", onClick: () => router.push("/app/calls") },
               { icon: <DotsVIcon />, key: "more", onClick: () => setDetailOpen(!detailOpen) },
             ].map((b) => (
@@ -121,7 +152,10 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
             <span style={{ color: "var(--p600)", fontWeight: 700 }}>{conv.pinnedMessage!.authorName}</span>
             <div style={{ marginTop: 1, color: "var(--text)" }}>{conv.pinnedMessage!.text}</div>
           </div>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "var(--p600)", background: "var(--bg)", border: "1px solid var(--p200)", borderRadius: 9, padding: "6px 14px", cursor: "pointer" }}>
+          <div
+            onClick={() => document.getElementById(`msg-${conv.pinnedMessage!.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+            style={{ fontSize: 13, fontWeight: 700, color: "var(--p600)", background: "var(--bg)", border: "1px solid var(--p200)", borderRadius: 9, padding: "6px 14px", cursor: "pointer" }}
+          >
             View
           </div>
           <span onClick={() => setPinHidden(true)} style={{ cursor: "pointer", color: "var(--text3)", display: "flex" }}>
@@ -148,12 +182,25 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
       </div>
       <div style={{ padding: mobile ? "10px 12px" : "12px 18px 16px", display: "flex", alignItems: "center", gap: 10, borderTop: mobile ? "1px solid var(--border)" : "none", background: mobile ? "var(--bg)" : "transparent" }}>
         {!mobile && (
-          <div
-            className="hoverable"
-            style={{ width: 42, height: 42, borderRadius: 12, background: "var(--bg)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", cursor: "pointer", flexShrink: 0 }}
-          >
-            <AttachIcon />
-          </div>
+          <>
+            <input
+              ref={attachRef}
+              type="file"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void handleAttach(f);
+                e.target.value = "";
+              }}
+            />
+            <div
+              className="hoverable"
+              onClick={() => attachRef.current?.click()}
+              style={{ width: 42, height: 42, borderRadius: 12, background: "var(--bg)", border: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", cursor: "pointer", flexShrink: 0 }}
+            >
+              <AttachIcon />
+            </div>
+          </>
         )}
         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 8, background: mobile ? "var(--muted)" : "var(--bg)", border: mobile ? "none" : "1px solid var(--border)", borderRadius: 12, padding: "4px 6px 4px 16px" }}>
           <input
@@ -169,7 +216,7 @@ export function ChatThread({ conv, mobile }: { conv: ConversationDto; mobile?: b
             style={{ flex: 1, border: "none", outline: "none", background: "transparent", font: "inherit", fontSize: 13.5, color: "var(--text)", padding: "8px 0" }}
           />
           {!mobile && (
-            <span style={{ color: "var(--text3)", cursor: "pointer", display: "flex" }}>
+            <span onClick={() => handleDraft(draft + "🙂")} style={{ color: "var(--text3)", cursor: "pointer", display: "flex" }}>
               <EmojiIcon />
             </span>
           )}
@@ -210,7 +257,7 @@ function MessageRow({
   const sameSender = prev && prev.senderId === m.senderId && !prev.mine;
   if (m.mine) {
     return (
-      <div style={{ alignSelf: "flex-end", maxWidth: mobile ? "80%" : "62%", display: "flex", flexDirection: "column", alignItems: "flex-end", margin: "3px 0" }}>
+      <div id={`msg-${m.id}`} style={{ alignSelf: "flex-end", maxWidth: mobile ? "80%" : "62%", display: "flex", flexDirection: "column", alignItems: "flex-end", margin: "3px 0" }}>
         <div style={{ background: "var(--bubble-out)", borderRadius: "14px 14px 4px 14px", padding: "10px 14px", fontSize: 13.5, lineHeight: 1.55, boxShadow: "var(--shadow)" }}>
           {m.text}
           <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 5, marginTop: 3, fontSize: 11, color: "var(--text3)" }}>

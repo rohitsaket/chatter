@@ -1,4 +1,5 @@
 "use client";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 import { Avatar } from "@chatter/ui";
 import { useMe } from "@/lib/queries";
@@ -16,6 +17,7 @@ const NAV = [
 ];
 
 export default function ProfilePage() {
+  const router = useRouter();
   const me = useMe();
   const [isMobile, setIsMobile] = React.useState<boolean | null>(null);
 
@@ -55,6 +57,8 @@ export default function ProfilePage() {
             <div
               key={pn.name}
               className={pn.active ? undefined : "hoverable"}
+              onClick={pn.active ? undefined : () => router.push("/app/settings")}
+              title={pn.active ? undefined : "Managed under Settings"}
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: pn.active ? "var(--sel)" : "transparent", color: pn.active ? "var(--p600)" : "var(--text)" }}
             >
               <span style={{ opacity: 0.8 }}>{pn.icon}</span>
@@ -67,7 +71,6 @@ export default function ProfilePage() {
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18, overflow: "hidden", boxShadow: "var(--shadow)" }}>
           <div style={{ height: 170, background: "linear-gradient(140deg,#e8b3c8 0%,#b58fd4 30%,#7a6bb8 55%,#4a4a80 80%,#333356 100%)", position: "relative" }}>
             <div style={{ position: "absolute", inset: 0, background: "repeating-linear-gradient(45deg,transparent,transparent 30px,rgba(255,255,255,.05) 30px,rgba(255,255,255,.05) 60px)" }} />
-            <span style={{ position: "absolute", top: 12, right: 16, color: "#fff", cursor: "pointer" }}>•••</span>
           </div>
           <div style={{ display: "flex", gap: 18, padding: "0 24px 20px" }}>
             <div style={{ position: "relative", marginTop: -48 }}>
@@ -88,7 +91,11 @@ export default function ProfilePage() {
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "flex-end", paddingBottom: 2 }}>
-              <div className="hover-p700" style={{ background: "var(--p600)", color: "#fff", borderRadius: 99, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+              <div
+                className="hover-p700"
+                onClick={() => router.push("/app/settings")}
+                style={{ background: "var(--p600)", color: "#fff", borderRadius: 99, padding: "9px 18px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
                 ✏️ Edit Profile
               </div>
             </div>
@@ -130,7 +137,7 @@ export default function ProfilePage() {
                 <div style={{ fontSize: 12.5, fontWeight: 700 }}>Password</div>
                 <div style={{ fontSize: 11, color: "var(--text2)" }}>Argon2id-hashed; change it any time.</div>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Change</span>
+              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Change</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 0" }}>
               <span>🛡</span>
@@ -138,7 +145,7 @@ export default function ProfilePage() {
                 <div style={{ fontSize: 12.5, fontWeight: 700 }}>Two-Factor Authentication</div>
                 <div style={{ fontSize: 11, color: "var(--text2)" }}>{u.mfaEnabled ? "Enabled" : "Not enabled"}</div>
               </div>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Manage</span>
+              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Manage</span>
             </div>
           </div>
         </div>

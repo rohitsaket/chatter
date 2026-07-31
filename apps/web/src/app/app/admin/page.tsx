@@ -5,17 +5,21 @@ import { Avatar, PresenceDot, presenceLabel } from "@chatter/ui";
 import { api } from "@/lib/api";
 import { formatBytes, relativeTime } from "@/lib/format";
 import { useAdminAudit, useAdminMembers, useAdminStorage, useMe } from "@/lib/queries";
+import { DotsMenu } from "@/components/common/Menu";
 
 const NAV = [
-  { name: "Members", icon: "👥", active: true },
+  { name: "Members", icon: "👥" },
+  { name: "Storage", icon: "💾" },
+  { name: "Audit Log", icon: "📜" },
   { name: "Workspaces", icon: "🗂" },
   { name: "Roles & Permissions", icon: "🛡" },
   { name: "Groups", icon: "👪" },
-  { name: "Storage", icon: "💾" },
-  { name: "Audit Log", icon: "📜" },
   { name: "Retention", icon: "⏳" },
   { name: "Moderation", icon: "⚖" },
 ];
+
+/** Sections with a real backend today. The rest show a truthful empty state. */
+const BUILT = new Set(["Members", "Storage", "Audit Log"]);
 
 const AUDIT_ICONS: Record<string, string> = {
   "security.mfa_enabled": "🔑",
@@ -36,6 +40,8 @@ export default function AdminPage() {
   const storage = useAdminStorage();
   const audit = useAdminAudit();
   const qc = useQueryClient();
+  const [section, setSection] = React.useState("Members");
+  const [inviteCopied, setInviteCopied] = React.useState(false);
 
   if (me.data && me.data.orgRole !== "OWNER" && me.data.orgRole !== "ADMIN") {
     return (
@@ -48,31 +54,98 @@ export default function AdminPage() {
   const rows = members.data ?? [];
   const st = storage.data;
 
+  const storageCard = (
+    <div style={adminCard}>
+      <div style={{ fontWeight: 800, fontSize: 13.5 }}>Storage</div>
+      {st && (
+        <>
+          <div style={{ fontSize: 24, fontWeight: 800, marginTop: 10 }}>
+            {formatBytes(st.usedBytes)} <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)" }}>of {formatBytes(st.quotaBytes)}</span>
+          </div>
+          <div style={{ height: 8, borderRadius: 99, background: "var(--muted)", overflow: "hidden", marginTop: 10 }}>
+            <div style={{ width: `${Math.min(100, (st.usedBytes / st.quotaBytes) * 100)}%`, height: "100%", background: "var(--p600)", borderRadius: 99 }} />
+          </div>
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text2)", marginTop: 10 }}>
+            <span>Files {formatBytes(st.byCategory.files)}</span>
+            <span>Media {formatBytes(st.byCategory.media)}</span>
+            <span>Other {formatBytes(st.byCategory.other)}</span>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
   return (
     <>
       <div style={{ width: 238, flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)", background: "var(--bg)" }}>
         <div style={{ padding: "16px 18px 10px", fontSize: 16, fontWeight: 800 }}>Administration</div>
         <div style={{ padding: "0 10px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {NAV.map((an) => (
-            <div
-              key={an.name}
-              className={an.active ? undefined : "hoverable"}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: an.active ? "var(--sel)" : "transparent", color: an.active ? "var(--p600)" : "var(--text)" }}
-            >
-              <span style={{ opacity: 0.8 }}>{an.icon}</span>
-              {an.name}
-            </div>
-          ))}
+          {NAV.map((an) => {
+            const active = section === an.name;
+            return (
+              <div
+                key={an.name}
+                className={active ? undefined : "hoverable"}
+                onClick={() => setSection(an.name)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+              >
+                <span style={{ opacity: 0.8 }}>{an.icon}</span>
+                {an.name}
+              </div>
+            );
+          })}
         </div>
       </div>
       <main style={{ flex: 1, minWidth: 0, overflowY: "auto", background: "var(--bg-subtle)", padding: "18px 24px" }}>
+        {!BUILT.has(section) ? (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 8, color: "var(--text2)" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>{section}</div>
+            <div style={{ fontSize: 13, textAlign: "center", maxWidth: 380, lineHeight: 1.6 }}>
+              This administration area has no backend in the current build. Members, Storage and the Audit Log are fully functional.
+            </div>
+          </div>
+        ) : section === "Storage" ? (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>Storage</div>
+            <div style={{ maxWidth: 460, marginTop: 16 }}>{storageCard}</div>
+          </>
+        ) : section === "Audit Log" ? (
+          <>
+            <div style={{ fontSize: 20, fontWeight: 800 }}>Audit Log</div>
+            <div style={{ ...adminCard, marginTop: 16 }}>
+              {(audit.data ?? []).map((ae) => (
+                <div key={ae.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 12.5 }}>
+                  <span style={{ width: 28, height: 28, borderRadius: 8, background: "var(--muted)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {AUDIT_ICONS[ae.action] ?? "📌"}
+                  </span>
+                  <span style={{ flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {ae.actorName ? `${ae.actorName} — ` : ""}
+                    {ae.action.replace(/[._]/g, " ")}
+                    {ae.target ? ` (${ae.target.slice(0, 40)})` : ""}
+                  </span>
+                  <span style={{ color: "var(--text3)", fontSize: 11, flexShrink: 0 }}>{relativeTime(ae.createdAt)}</span>
+                </div>
+              ))}
+              {(audit.data ?? []).length === 0 && <div style={{ fontSize: 12.5, color: "var(--text3)", padding: 8 }}>No audit events.</div>}
+            </div>
+          </>
+        ) : (
+          <>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 20, fontWeight: 800 }}>Members</div>
             <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 3 }}>{rows.length} members</div>
           </div>
-          <div className="hover-p700" style={{ background: "var(--p600)", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 10, padding: "9px 16px", cursor: "pointer" }}>
-            + Invite Members
+          <div
+            className="hover-p700"
+            onClick={() => {
+              void navigator.clipboard.writeText(`${window.location.origin}/auth/register`).catch(() => void 0);
+              setInviteCopied(true);
+              setTimeout(() => setInviteCopied(false), 1600);
+            }}
+            style={{ background: "var(--p600)", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 10, padding: "9px 16px", cursor: "pointer" }}
+          >
+            {inviteCopied ? "Invite link copied ✓" : "+ Invite Members"}
           </div>
         </div>
         <div style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 15, marginTop: 16, boxShadow: "var(--shadow)", overflow: "hidden" }}>
@@ -113,9 +186,26 @@ export default function AdminPage() {
               </span>
               <span style={{ color: "var(--text2)", fontSize: 12.5 }}>{am.lastActiveAt ? relativeTime(am.lastActiveAt) : "—"}</span>
               <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                <span className="hoverable" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", border: "1px solid var(--border)", borderRadius: 99, padding: "4px 11px", cursor: "pointer" }}>
-                  Manage
-                </span>
+                {am.role !== "OWNER" && (
+                  <DotsMenu
+                    size={0}
+                    trigger={
+                      <span className="hoverable" style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)", border: "1px solid var(--border)", borderRadius: 99, padding: "4px 11px", cursor: "pointer", display: "inline-block" }}>
+                        Manage
+                      </span>
+                    }
+                    triggerStyle={{ width: "auto", height: "auto", display: "block" }}
+                    items={(["ADMIN", "MODERATOR", "MEMBER", "GUEST"] as const)
+                      .filter((r) => r !== am.role)
+                      .map((r) => ({
+                        label: `Make ${r.charAt(0) + r.slice(1).toLowerCase()}`,
+                        onClick: () =>
+                          void api(`/admin/members/${am.userId}/role`, { method: "POST", json: { role: r } }).then(() =>
+                            qc.invalidateQueries({ queryKey: ["admin-members"] }),
+                          ),
+                      }))}
+                  />
+                )}
                 {am.role !== "OWNER" && (
                   <span
                     onClick={() =>
@@ -133,31 +223,11 @@ export default function AdminPage() {
           ))}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1.4fr", gap: 14, marginTop: 14 }}>
-          <div style={adminCard}>
-            <div style={{ fontWeight: 800, fontSize: 13.5 }}>Storage</div>
-            {st && (
-              <>
-                <div style={{ fontSize: 24, fontWeight: 800, marginTop: 10 }}>
-                  {formatBytes(st.usedBytes)} <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text2)" }}>of {formatBytes(st.quotaBytes)}</span>
-                </div>
-                <div style={{ height: 8, borderRadius: 99, background: "var(--muted)", overflow: "hidden", marginTop: 10 }}>
-                  <div style={{ width: `${Math.min(100, (st.usedBytes / st.quotaBytes) * 100)}%`, height: "100%", background: "var(--p600)", borderRadius: 99 }} />
-                </div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--text2)", marginTop: 10 }}>
-                  <span>Files {formatBytes(st.byCategory.files)}</span>
-                  <span>Media {formatBytes(st.byCategory.media)}</span>
-                  <span>Other {formatBytes(st.byCategory.other)}</span>
-                </div>
-              </>
-            )}
-            <div style={{ borderTop: "1px solid var(--border)", marginTop: 12, paddingTop: 11, fontSize: 12.5, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>
-              Manage quotas ›
-            </div>
-          </div>
+          {storageCard}
           <div style={adminCard}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontWeight: 800, fontSize: 13.5 }}>Recent Audit Events</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>Open audit log</span>
+              <span onClick={() => setSection("Audit Log")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>Open audit log</span>
             </div>
             {(audit.data ?? []).slice(0, 5).map((ae) => (
               <div key={ae.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 12.5 }}>
@@ -174,6 +244,8 @@ export default function AdminPage() {
             ))}
           </div>
         </div>
+          </>
+        )}
       </main>
     </>
   );

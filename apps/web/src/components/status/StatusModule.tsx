@@ -7,7 +7,8 @@ import { Avatar } from "@chatter/ui";
 import { api } from "@/lib/api";
 import { relativeTime, clockTime } from "@/lib/format";
 import { useMe, useStatuses } from "@/lib/queries";
-import { CameraIcon, CloseIcon, DotsHIcon, GroupsIcon, LockIcon, MuteBellIcon, SendIcon, ShareIcon, ArchiveIcon, TrashIcon, EmojiIcon } from "../icons";
+import { DotsMenu } from "../common/Menu";
+import { CameraIcon, CloseIcon, DotsHIcon, GroupsIcon, LockIcon, SendIcon, ShareIcon, TrashIcon, EmojiIcon } from "../icons";
 
 export function StatusModule() {
   const me = useMe();
@@ -16,6 +17,7 @@ export function StatusModule() {
   const router = useRouter();
   const [selIdx, setSelIdx] = React.useState(0);
   const [reply, setReply] = React.useState("");
+  const [detailsClosed, setDetailsClosed] = React.useState(false);
   const [isMobile, setIsMobile] = React.useState<boolean | null>(null);
 
   React.useEffect(() => {
@@ -82,8 +84,15 @@ export function StatusModule() {
           </div>
         )}
         <div style={{ flex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: 13.5 }}>My Status</div>
-          <div style={{ fontSize: 12, color: "var(--text2)" }}>Tap to add status update</div>
+          <div
+            onClick={() =>
+              api("/statuses", { method: "POST", json: { caption: "Shared from Chatter web" } }).then(() => qc.invalidateQueries({ queryKey: ["statuses"] }))
+            }
+            style={{ cursor: "pointer" }}
+          >
+            <div style={{ fontWeight: 800, fontSize: 13.5 }}>My Status</div>
+            <div style={{ fontSize: 12, color: "var(--text2)" }}>Tap to add status update</div>
+          </div>
         </div>
         <div
           onClick={() =>
@@ -146,8 +155,21 @@ export function StatusModule() {
                 <div style={{ fontWeight: 800, fontSize: 15 }}>{current.owner.name}</div>
                 <div style={{ fontSize: 12.5, opacity: 0.75 }}>{relativeTime(current.createdAt)}</div>
               </div>
-              <div style={{ display: "flex", gap: 14, color: "#fff", opacity: 0.9 }}>
-                <DotsHIcon size={18} style={{ cursor: "pointer" }} />
+              <div style={{ display: "flex", gap: 14, color: "#fff", opacity: 0.9, alignItems: "center" }}>
+                <DotsMenu
+                  size={24}
+                  trigger={<DotsHIcon size={18} />}
+                  items={[
+                    {
+                      label: `Message ${current.owner.name.split(" ")[0]}`,
+                      onClick: () =>
+                        void api<{ slug: string | null; id: string }>("/conversations/dm", { method: "POST", json: { userId: current.owner.id } }).then((c) =>
+                          router.push(`/app/chats/${c.slug ?? c.id}`),
+                        ),
+                    },
+                    ...(detailsClosed ? [{ label: "Show details", onClick: () => setDetailsClosed(false) }] : []),
+                  ]}
+                />
                 <span onClick={() => router.push("/app/chats")} style={{ cursor: "pointer", display: "flex" }}>
                   <CloseIcon size={17} strokeWidth={1.9} />
                 </span>
@@ -191,7 +213,10 @@ export function StatusModule() {
                     </div>
                   );
                 })}
-                <div style={{ display: "flex", alignItems: "center", background: "rgba(16,19,34,.5)", border: "1px solid rgba(255,255,255,.22)", borderRadius: 12, padding: "8px 12px", color: "#fff", cursor: "pointer", backdropFilter: "blur(6px)" }}>
+                <div
+                  onClick={() => reactMut.mutate({ id: current.id, emoji: "😊" })}
+                  style={{ display: "flex", alignItems: "center", background: "rgba(16,19,34,.5)", border: "1px solid rgba(255,255,255,.22)", borderRadius: 12, padding: "8px 12px", color: "#fff", cursor: "pointer", backdropFilter: "blur(6px)" }}
+                >
                   <EmojiIcon size={16} />
                 </div>
               </div>
@@ -203,7 +228,22 @@ export function StatusModule() {
           </div>
         )}
       </main>
-      {current && <StatusDetails s={current} />}
+      {current && !detailsClosed && (
+        <StatusDetails
+          s={current}
+          mine={current.owner.id === me.data?.id}
+          onClose={() => setDetailsClosed(true)}
+          onReact={(emoji) => reactMut.mutate({ id: current.id, emoji })}
+          onMessage={() =>
+            void api<{ slug: string | null; id: string }>("/conversations/dm", { method: "POST", json: { userId: current.owner.id } }).then((c) =>
+              router.push(`/app/chats/${c.slug ?? c.id}`),
+            )
+          }
+          onDelete={() =>
+            void api(`/statuses/${current.id}`, { method: "DELETE" }).then(() => qc.invalidateQueries({ queryKey: ["statuses"] }))
+          }
+        />
+      )}
     </>
   );
 }
@@ -227,15 +267,30 @@ function StatusRow({ s, ringColor, selected, onClick }: { s: StatusDto; ringColo
   );
 }
 
-function StatusDetails({ s }: { s: StatusDto }) {
+function StatusDetails({
+  s,
+  mine,
+  onClose,
+  onReact,
+  onMessage,
+  onDelete,
+}: {
+  s: StatusDto;
+  mine: boolean;
+  onClose: () => void;
+  onReact: (emoji: string) => void;
+  onMessage: () => void;
+  onDelete: () => void;
+}) {
   const total = s.viewCount + s.notViewedCount;
   const viewedDeg = total ? Math.round((s.viewCount / total) * 360) : 0;
   const reactTotal = s.reactions.reduce((a, r) => a + r.count, 0);
+  const [copied, setCopied] = React.useState(false);
   return (
     <aside style={{ width: 308, flexShrink: 0, borderLeft: "1px solid var(--border)", background: "var(--bg-subtle)", overflowY: "auto", padding: "0 14px 16px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 4px 12px" }}>
         <div style={{ fontSize: 15.5, fontWeight: 800 }}>Status Details</div>
-        <span style={{ cursor: "pointer", color: "var(--text2)", display: "flex" }}>
+        <span onClick={onClose} style={{ cursor: "pointer", color: "var(--text2)", display: "flex" }}>
           <CloseIcon />
         </span>
       </div>
@@ -288,7 +343,7 @@ function StatusDetails({ s }: { s: StatusDto }) {
       </div>
       <div style={cardStyle}>
         <div style={{ fontWeight: 800, fontSize: 13.5 }}>Audience</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 11, marginTop: 10, cursor: "pointer" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 11, marginTop: 10 }}>
           <div style={{ width: 38, height: 38, borderRadius: 11, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--p600)" }}>
             <GroupsIcon size={17} />
           </div>
@@ -311,7 +366,10 @@ function StatusDetails({ s }: { s: StatusDto }) {
               <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--text2)" }}>{r.count}</span>
             </div>
           ))}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "var(--muted)", borderRadius: 11, padding: "8px 12px", color: "var(--text2)", fontSize: 16, cursor: "pointer" }}>
+          <div
+            onClick={() => onReact("❤️")}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", background: "var(--muted)", borderRadius: 11, padding: "8px 12px", color: "var(--text2)", fontSize: 16, cursor: "pointer" }}
+          >
             +
           </div>
         </div>
@@ -332,26 +390,35 @@ function StatusDetails({ s }: { s: StatusDto }) {
       <div style={{ ...cardStyle, padding: "6px 14px" }}>
         <div style={{ fontWeight: 800, fontSize: 13.5, padding: "10px 0 4px" }}>Actions</div>
         {[
-          { label: `Mute ${s.owner.name.split(" ")[0]}'s updates`, icon: <MuteBellIcon />, border: true },
-          { label: "Share status", icon: <ShareIcon />, border: true },
-          { label: "Archive status", icon: <ArchiveIcon size={16} />, border: true },
-          { label: "Delete status", icon: <TrashIcon />, danger: true },
-        ].map((a) => (
+          ...(!mine ? [{ label: `Message ${s.owner.name.split(" ")[0]}`, icon: <SendIcon size={15} />, onClick: onMessage, border: true }] : []),
+          {
+            label: copied ? "Link copied ✓" : "Share status",
+            icon: <ShareIcon />,
+            border: mine,
+            onClick: () => {
+              void navigator.clipboard.writeText(`${window.location.origin}/app/status`).catch(() => void 0);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1600);
+            },
+          },
+          ...(mine ? [{ label: "Delete status", icon: <TrashIcon />, danger: true, onClick: onDelete }] : []),
+        ].map((a, i, arr) => (
           <div
             key={a.label}
+            onClick={a.onClick}
             style={{
               display: "flex",
               alignItems: "center",
               gap: 11,
               padding: "10px 0",
               fontSize: 13,
-              fontWeight: a.danger ? 700 : 600,
+              fontWeight: "danger" in a && a.danger ? 700 : 600,
               cursor: "pointer",
-              color: a.danger ? "var(--bad)" : "var(--text)",
-              borderBottom: a.border ? "1px solid var(--border)" : "none",
+              color: "danger" in a && a.danger ? "var(--bad)" : "var(--text)",
+              borderBottom: i < arr.length - 1 ? "1px solid var(--border)" : "none",
             }}
           >
-            <span style={{ color: a.danger ? "var(--bad)" : "var(--text2)", display: "flex" }}>{a.icon}</span>
+            <span style={{ color: "danger" in a && a.danger ? "var(--bad)" : "var(--text2)", display: "flex" }}>{a.icon}</span>
             {a.label}
           </div>
         ))}

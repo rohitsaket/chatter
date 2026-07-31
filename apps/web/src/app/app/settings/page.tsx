@@ -4,7 +4,7 @@ import { SegmentedControl, Toggle } from "@chatter/ui";
 import { useSettings, useUpdateSettings } from "@/lib/queries";
 
 const NAV = [
-  { name: "General", desc: "Basic preferences and startup.", icon: "⚙", active: true },
+  { name: "General", desc: "Basic preferences and startup.", icon: "⚙" },
   { name: "Theme", desc: "Appearance, colors and wallpaper.", icon: "🎨" },
   { name: "Chat Settings", desc: "Message behavior and reactions.", icon: "💬" },
   { name: "Font Settings", desc: "Customize fonts and sizes.", icon: "🔤" },
@@ -41,6 +41,8 @@ export default function SettingsPage() {
   const settings = useSettings();
   const update = useUpdateSettings();
   const [isMobile, setIsMobile] = React.useState<boolean | null>(null);
+  const [section, setSection] = React.useState("General");
+  const [savedFlash, setSavedFlash] = React.useState(false);
 
   React.useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 760);
@@ -62,7 +64,13 @@ export default function SettingsPage() {
             <div style={{ fontSize: 21, fontWeight: 800 }}>General</div>
             <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>Customize your app experience and startup preferences.</div>
           </div>
-          <div className="hoverable" style={{ border: "1px solid var(--border)", background: "var(--bg)", borderRadius: 11, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+          <div
+            className="hoverable"
+            onClick={() =>
+              update.mutate({ theme: "light", accent: "purple", msgLayout: "Comfortable", fontSize: 14, wallpaper: "Classic", startupLaunch: true, msgPreviews: true, openTo: "Chats" })
+            }
+            style={{ border: "1px solid var(--border)", background: "var(--bg)", borderRadius: 11, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+          >
             ↺ Restore Defaults
           </div>
         </div>
@@ -216,27 +224,48 @@ export default function SettingsPage() {
       <div style={{ width: 280, flexShrink: 0, display: "flex", flexDirection: "column", borderRight: "1px solid var(--border)", background: "var(--bg)", overflowY: "auto" }}>
         <div style={{ padding: "16px 18px 10px", fontSize: 16, fontWeight: 800 }}>Settings</div>
         <div style={{ padding: "0 10px 16px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {NAV.map((sn) => (
-            <div
-              key={sn.name}
-              className={sn.active ? undefined : "hoverable"}
-              style={{ display: "flex", gap: 11, padding: "9px 11px", borderRadius: 12, cursor: "pointer", background: sn.active ? "var(--sel)" : "transparent" }}
-            >
-              <span style={{ opacity: 0.8, paddingTop: 1 }}>{sn.icon}</span>
-              <div>
-                <div style={{ fontSize: 13.5, fontWeight: 700, color: sn.active ? "var(--p600)" : "var(--text)" }}>{sn.name}</div>
-                <div style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 1 }}>{sn.desc}</div>
+          {NAV.map((sn) => {
+            const active = section === sn.name;
+            return (
+              <div
+                key={sn.name}
+                className={active ? undefined : "hoverable"}
+                onClick={() => setSection(sn.name)}
+                style={{ display: "flex", gap: 11, padding: "9px 11px", borderRadius: 12, cursor: "pointer", background: active ? "var(--sel)" : "transparent" }}
+              >
+                <span style={{ opacity: 0.8, paddingTop: 1 }}>{sn.icon}</span>
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: active ? "var(--p600)" : "var(--text)" }}>{sn.name}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 1 }}>{sn.desc}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg-subtle)" }}>
-        {settingsBody}
+        {section === "General" ? (
+          settingsBody
+        ) : (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text2)" }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>{section}</div>
+            <div style={{ fontSize: 13, textAlign: "center", maxWidth: 380, lineHeight: 1.6 }}>
+              This settings area has no backend in the current build. All supported preferences live under General and persist to your account.
+            </div>
+          </div>
+        )}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 26px", borderTop: "1px solid var(--border)", background: "var(--bg)" }}>
           <span style={{ fontSize: 12.5, color: "var(--text2)" }}>✓ Changes are saved automatically.</span>
-          <div className="hover-p700" style={{ background: "var(--p600)", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 11, padding: "10px 20px", cursor: "pointer" }}>
-            Save Preferences
+          <div
+            className="hover-p700"
+            onClick={() => {
+              update.mutate({});
+              setSavedFlash(true);
+              setTimeout(() => setSavedFlash(false), 1600);
+            }}
+            style={{ background: savedFlash ? "var(--good)" : "var(--p600)", color: "#fff", fontSize: 13, fontWeight: 700, borderRadius: 11, padding: "10px 20px", cursor: "pointer" }}
+          >
+            {savedFlash ? "Saved ✓" : "Save Preferences"}
           </div>
         </div>
       </main>
