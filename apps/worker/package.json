@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "dev": "tsc -p tsconfig.json --watch & node --watch dist/main.js",
+    "dev": "tsx watch src/main.ts",
     "start": "node dist/main.js",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit"
@@ -22,6 +22,7 @@
   "devDependencies": {
     "@chatter/eslint-config": "workspace:*",
     "@chatter/typescript-config": "workspace:*",
+    "tsx": "^4.23.12",
     "typescript": "^5.9.3"
   }
 }

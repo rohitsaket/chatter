@@ -59,7 +59,7 @@ export default function ProfilePage() {
               className={pn.active ? undefined : "hoverable"}
               onClick={pn.active ? undefined : () => router.push("/app/settings")}
               title={pn.active ? undefined : "Managed under Settings"}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: pn.active ? "var(--sel)" : "transparent", color: pn.active ? "var(--p600)" : "var(--text)" }}
+              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: pn.active ? "var(--sel)" : "transparent", color: pn.active ? "var(--accent-text)" : "var(--text)" }}
             >
               <span style={{ opacity: 0.8 }}>{pn.icon}</span>
               {pn.name}
@@ -137,7 +137,7 @@ export default function ProfilePage() {
                 <div style={{ fontSize: 12.5, fontWeight: 700 }}>Password</div>
                 <div style={{ fontSize: 11, color: "var(--text2)" }}>Argon2id-hashed; change it any time.</div>
               </div>
-              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Change</span>
+              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-text)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Change</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 0" }}>
               <span>🛡</span>
@@ -145,7 +145,7 @@ export default function ProfilePage() {
                 <div style={{ fontSize: 12.5, fontWeight: 700 }}>Two-Factor Authentication</div>
                 <div style={{ fontSize: 11, color: "var(--text2)" }}>{u.mfaEnabled ? "Enabled" : "Not enabled"}</div>
               </div>
-              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Manage</span>
+              <span onClick={() => router.push("/app/settings")} style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-text)", border: "1px solid var(--border)", borderRadius: 99, padding: "5px 12px", cursor: "pointer" }}>Manage</span>
             </div>
           </div>
         </div>

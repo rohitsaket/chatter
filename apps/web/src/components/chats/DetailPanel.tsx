@@ -78,7 +78,7 @@ export function DetailPanel({ conv, selfName }: { conv: ConversationDto; selfNam
               key={a.label}
               className="hoverable-sel"
               onClick={a.onClick}
-              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "var(--muted)", borderRadius: 12, padding: "11px 4px", cursor: "pointer", color: "var(--p600)" }}
+              style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "var(--muted)", borderRadius: 12, padding: "11px 4px", cursor: "pointer", color: "var(--accent-text)" }}
             >
               {a.icon}
               <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>{a.label}</span>
@@ -87,7 +87,7 @@ export function DetailPanel({ conv, selfName }: { conv: ConversationDto; selfNam
           <DotsMenu
             size={0}
             trigger={
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "var(--muted)", borderRadius: 12, padding: "11px 4px", cursor: "pointer", color: "var(--p600)", width: "100%" }}>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, background: "var(--muted)", borderRadius: 12, padding: "11px 4px", cursor: "pointer", color: "var(--accent-text)", width: "100%" }}>
                 <DotsHIcon />
                 <span style={{ fontSize: 11, fontWeight: 600, color: "var(--text2)" }}>More</span>
               </div>
@@ -126,7 +126,7 @@ export function DetailPanel({ conv, selfName }: { conv: ConversationDto; selfNam
               <span style={{ fontSize: 13.5, fontWeight: 800 }}>Members ({members.length})</span>
               <DotsMenu
                 size={0}
-                trigger={<span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>+ Add Member</span>}
+                trigger={<span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent-text)", cursor: "pointer" }}>+ Add Member</span>}
                 triggerStyle={{ width: "auto", height: "auto", display: "block" }}
                 items={
                   invitable.length > 0
@@ -144,7 +144,7 @@ export function DetailPanel({ conv, selfName }: { conv: ConversationDto; selfNam
                   <div style={{ fontSize: 13, fontWeight: 700 }}>{gm.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--text2)" }}>{presenceLabel(gm.presence)}</div>
                 </div>
-                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--p600)", background: "var(--p100)", borderRadius: 99, padding: "3px 9px" }}>
+                <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-text)", background: "var(--p100)", borderRadius: 99, padding: "3px 9px" }}>
                   {gm.role === "OWNER" || gm.role === "ADMIN" ? "Admin" : gm.role === "MODERATOR" ? "Moderator" : "Member"}
                 </span>
               </div>
@@ -170,7 +170,7 @@ export function DetailPanel({ conv, selfName }: { conv: ConversationDto; selfNam
           <div style={{ padding: "14px 18px" }}>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
               <span style={{ fontSize: 13.5, fontWeight: 800 }}>Shared Files</span>
-              <span onClick={() => router.push("/app/files")} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>
+              <span onClick={() => router.push("/app/files")} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent-text)", cursor: "pointer" }}>
                 View all
               </span>
             </div>

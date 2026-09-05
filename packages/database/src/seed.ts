@@ -5,6 +5,7 @@
  */
 import { PrismaClient, OrgRole, ConversationKind, GroupPrivacy, FileStatus, Presence } from "@prisma/client";
 import argon2 from "argon2";
+import { encryptIdentity, fingerprintIdentity } from "./identity.crypto";
 
 const prisma = new PrismaClient();
 
@@ -31,22 +32,30 @@ type UserSeed = {
   department: string;
   phone: string;
   presence: Presence;
+  /**
+   * Verhoeff-valid but NOT issued — these are synthetic demo values. Every
+   * seeded account needs one because Aadhaar is the third factor in password
+   * reset and the subject of the admin identity-reveal screen; without it
+   * both flows fail for every demo account, and the reset flow fails
+   * silently by design.
+   */
+  aadhaar: string;
 };
 
 const USERS: UserSeed[] = [
-  { key: "jd", name: "John Doe", title: "Engineering Manager", department: "Engineering", phone: "+1 (555) 000-1111", presence: "ONLINE" },
-  { key: "al", name: "Alice Johnson", title: "UI/UX Designer", department: "Design", phone: "+1 (555) 123-4567", presence: "ONLINE" },
-  { key: "mb", name: "Michael Brown", title: "Product Manager", department: "Product", phone: "+1 (555) 234-5678", presence: "AWAY" },
-  { key: "sj", name: "Sarah Johnson", title: "Project Manager", department: "Operations", phone: "+1 (555) 345-6789", presence: "ONLINE" },
-  { key: "dw", name: "David Wilson", title: "Dev Lead", department: "Engineering", phone: "+1 (555) 456-7890", presence: "OFFLINE" },
-  { key: "om", name: "Olivia Martinez", title: "Marketing Specialist", department: "Marketing", phone: "+1 (555) 678-9012", presence: "AWAY" },
-  { key: "ja", name: "James Anderson", title: "Backend Engineer", department: "Engineering", phone: "+1 (555) 567-8901", presence: "ONLINE" },
-  { key: "dt", name: "Daniel Thomas", title: "UX Researcher", department: "Design", phone: "+1 (555) 789-0123", presence: "ONLINE" },
-  { key: "sl", name: "Sophia Lee", title: "Data Analyst", department: "Data", phone: "+1 (555) 890-1234", presence: "OFFLINE" },
-  { key: "mt", name: "Matthew Taylor", title: "Sales Manager", department: "Sales", phone: "+1 (555) 901-2345", presence: "ONLINE" },
-  { key: "ed", name: "Emily Davis", title: "Content Writer", department: "Marketing", phone: "+1 (555) 012-3456", presence: "OFFLINE" },
-  { key: "wc", name: "William Clark", title: "System Administrator", department: "IT", phone: "+1 (555) 123-0987", presence: "AWAY" },
-  { key: "ar", name: "Ava Rodriguez", title: "Customer Success", department: "Support", phone: "+1 (555) 234-1098", presence: "ONLINE" },
+  { key: "jd", name: "John Doe", title: "Engineering Manager", department: "Engineering", phone: "+1 (555) 000-1111", presence: "ONLINE", aadhaar: "234567890124" },
+  { key: "al", name: "Alice Johnson", title: "UI/UX Designer", department: "Design", phone: "+1 (555) 123-4567", presence: "ONLINE", aadhaar: "987654321012" },
+  { key: "mb", name: "Michael Brown", title: "Product Manager", department: "Product", phone: "+1 (555) 234-5678", presence: "AWAY", aadhaar: "555123456781" },
+  { key: "sj", name: "Sarah Johnson", title: "Project Manager", department: "Operations", phone: "+1 (555) 345-6789", presence: "ONLINE", aadhaar: "789012345674" },
+  { key: "dw", name: "David Wilson", title: "Dev Lead", department: "Engineering", phone: "+1 (555) 456-7890", presence: "OFFLINE", aadhaar: "612345678904" },
+  { key: "om", name: "Olivia Martinez", title: "Marketing Specialist", department: "Marketing", phone: "+1 (555) 678-9012", presence: "AWAY", aadhaar: "345678901238" },
+  { key: "ja", name: "James Anderson", title: "Backend Engineer", department: "Engineering", phone: "+1 (555) 567-8901", presence: "ONLINE", aadhaar: "456789012341" },
+  { key: "dt", name: "Daniel Thomas", title: "UX Researcher", department: "Design", phone: "+1 (555) 789-0123", presence: "ONLINE", aadhaar: "567890123458" },
+  { key: "sl", name: "Sophia Lee", title: "Data Analyst", department: "Data", phone: "+1 (555) 890-1234", presence: "OFFLINE", aadhaar: "678901234560" },
+  { key: "mt", name: "Matthew Taylor", title: "Sales Manager", department: "Sales", phone: "+1 (555) 901-2345", presence: "ONLINE", aadhaar: "789123456789" },
+  { key: "ed", name: "Emily Davis", title: "Content Writer", department: "Marketing", phone: "+1 (555) 012-3456", presence: "OFFLINE", aadhaar: "891234567891" },
+  { key: "wc", name: "William Clark", title: "System Administrator", department: "IT", phone: "+1 (555) 123-0987", presence: "AWAY", aadhaar: "912345678905" },
+  { key: "ar", name: "Ava Rodriguez", title: "Customer Success", department: "Support", phone: "+1 (555) 234-1098", presence: "ONLINE", aadhaar: "223456789018" },
 ];
 
 function email(name: string) {
@@ -101,6 +110,20 @@ async function main() {
       where: { userId: rec.id },
       update: {},
       create: { userId: rec.id },
+    });
+    // Encrypted at rest and fingerprinted for the unique index, exactly as
+    // registration does it — so a seeded account behaves like a real one.
+    // Left alone on re-run: re-encrypting would churn the ciphertext for no
+    // gain, and the fingerprint is deterministic anyway.
+    await prisma.userIdentity.upsert({
+      where: { userId: rec.id },
+      update: {},
+      create: {
+        userId: rec.id,
+        aadhaarEnc: encryptIdentity(u.aadhaar),
+        aadhaarHash: fingerprintIdentity(u.aadhaar),
+        aadhaarLast4: u.aadhaar.slice(-4),
+      },
     });
   }
   const jd = users.jd!, al = users.al!, mb = users.mb!, sj = users.sj!, dw = users.dw!;

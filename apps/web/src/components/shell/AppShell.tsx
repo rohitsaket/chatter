@@ -36,17 +36,46 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const s = settings.data;
   React.useEffect(() => {
     if (!s) return;
-    const dark = s.theme === "dark" || (s.theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-    document.body.dataset.theme = dark ? "dark" : "light";
-    if (s.accent === "purple") delete document.body.dataset.accent;
-    else document.body.dataset.accent = s.accent;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+    const apply = () => {
+      const dark = s.theme === "dark" || (s.theme === "system" && media.matches);
+      document.body.dataset.theme = dark ? "dark" : "light";
+      if (s.accent === "purple") delete document.body.dataset.accent;
+      else document.body.dataset.accent = s.accent;
+    };
+    apply();
+
+    // Mirror the server-side preference so the pre-paint script in the root
+    // layout can theme /auth/* pages and avoid a flash on the next load.
+    try {
+      window.localStorage.setItem("chatter.theme", s.theme);
+      window.localStorage.setItem("chatter.accent", s.accent);
+    } catch {
+      /* storage unavailable — theming still works for this session */
+    }
+
+    // "System" must track the OS switching theme while the app is open.
+    if (s.theme !== "system") return;
+    media.addEventListener("change", apply);
+    return () => media.removeEventListener("change", apply);
   }, [s]);
 
   const rootFs = s ? 13 + Math.round((s.fontSize - 12) * 0.4) : 13;
 
+  // `vw` is null until the post-mount effect runs, so the server render and the
+  // client's first render produce this same markup — hydration-safe without a
+  // `typeof window` branch (which would itself diverge server vs. client).
   if (me.isLoading || vw === null) {
     return (
-      <div style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", fontSize: 13.5 }}>
+      // Static text with no dynamic input. `suppressHydrationWarning` guards
+      // only against browser extensions decorating this node (e.g.
+      // `bis_skin_checked`) before React hydrates — it cannot mask a real
+      // mismatch here, because nothing in this subtree varies.
+      <div
+        suppressHydrationWarning
+        style={{ height: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text2)", fontSize: 13.5 }}
+      >
         Loading Chatter…
       </div>
     );

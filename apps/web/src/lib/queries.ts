@@ -10,6 +10,7 @@ import type {
   GroupDto,
   MeDto,
   MessageDto,
+  SendMessageBody,
   NotificationDto,
   Page,
   SettingsDto,
@@ -18,6 +19,8 @@ import type {
   UpdateSettingsBody,
 } from "@chatter/contracts";
 import { api } from "./api";
+import { disconnectRealtime } from "./socket";
+import { destroyLocalE2EE } from "./e2ee/crypto";
 
 export function useMe() {
   return useQuery<MeDto>({ queryKey: ["me"], queryFn: () => api("/users/me"), retry: false });
@@ -49,10 +52,13 @@ export function useMessages(idOrSlug: string | null) {
 export function useSendMessage(idOrSlug: string | null) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { text: string; replyToId?: string }) =>
+    mutationFn: (body: Omit<SendMessageBody, "idempotencyKey">) =>
       api<MessageDto>(`/conversations/${idOrSlug}/messages`, {
         method: "POST",
-        json: { ...body, idempotencyKey: crypto.randomUUID() },
+        json: {
+          ...body,
+          idempotencyKey: crypto.randomUUID(),
+        },
       }),
     onSuccess: (msg) => {
       qc.setQueryData<Page<MessageDto>>(["messages", idOrSlug], (old) =>
@@ -161,16 +167,46 @@ export function useUpdateSettings() {
   });
 }
 
-export function useAdminMembers() {
-  return useQuery<AdminMemberDto[]>({ queryKey: ["admin-members"], queryFn: () => api("/admin/members") });
+export function useAdminMembers(enabled = true) {
+  return useQuery<AdminMemberDto[]>({ queryKey: ["admin-members"], queryFn: () => api("/admin/members"), enabled });
 }
 
-export function useAdminStorage() {
-  return useQuery<StorageSummaryDto>({ queryKey: ["admin-storage"], queryFn: () => api("/admin/storage") });
+/**
+ * Org storage summary. `/admin/storage` is admin-only, so callers must pass
+ * `enabled: false` for non-admins — otherwise every ordinary user fires a
+ * request that can only ever 403.
+ */
+export function useAdminStorage(enabled = true) {
+  return useQuery<StorageSummaryDto>({
+    queryKey: ["admin-storage"],
+    queryFn: () => api("/admin/storage"),
+    enabled,
+  });
 }
 
-export function useAdminAudit() {
-  return useQuery<AuditEventDto[]>({ queryKey: ["admin-audit"], queryFn: () => api("/admin/audit") });
+export function useAdminAudit(enabled = true) {
+  return useQuery<AuditEventDto[]>({ queryKey: ["admin-audit"], queryFn: () => api("/admin/audit"), enabled });
+}
+
+/**
+ * Sign out: revoke the server session, then tear down all client state.
+ * The socket must be closed explicitly — it is a module-level singleton, so a
+ * subsequent login would otherwise reuse the connection bound to the revoked
+ * session. The query cache is cleared so the next user never sees cached data
+ * belonging to the previous one.
+ */
+export function useLogout() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api<{ ok: true }>("/auth/logout", { method: "POST" }),
+    onSettled: async () => {
+      disconnectRealtime();
+      await destroyLocalE2EE();
+      qc.clear();
+      // Full document navigation, so no stale React state survives the switch.
+      window.location.href = "/auth/login";
+    },
+  });
 }
 
 export function useJoinCall() {

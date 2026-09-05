@@ -38,6 +38,7 @@ export class FilesService {
       name: f.name,
       type: f.type,
       sizeBytes: Number(f.sizeBytes),
+      encrypted: f.encrypted,
       status: f.status,
       sharedIn: f.sharedIn,
       starred: f.stars.some((s) => s.userId === auth.userId),
@@ -69,7 +70,7 @@ export class FilesService {
       where: {
         organizationId: auth.organizationId,
         status: { not: "TRASHED" },
-        ...(q ? { name: { contains: q, mode: "insensitive" } } : {}),
+        ...(q ? { name: { contains: q } } : {}),
       },
       include: fileInclude,
       orderBy: { updatedAt: "desc" },
@@ -82,10 +83,10 @@ export class FilesService {
     return this.toDto(auth, f, true);
   }
 
-  async upload(auth: AuthedUser, name: string, mime: string, body: Buffer): Promise<FileDto> {
+  async upload(auth: AuthedUser, name: string, mime: string, body: Buffer, encrypted = false): Promise<FileDto> {
     const key = newStorageKey(auth.organizationId, name);
     const { checksum } = await this.storage.put(key, body, mime);
-    const ext = (name.split(".").pop() ?? "FILE").toUpperCase();
+    const ext = encrypted ? "ENC" : (name.split(".").pop() ?? "FILE").toUpperCase();
     const f = await this.prisma.client.file.create({
       data: {
         organizationId: auth.organizationId,
@@ -96,13 +97,17 @@ export class FilesService {
         sizeBytes: BigInt(body.byteLength),
         storageKey: key,
         checksum,
-        status: "PROCESSING",
+        status: encrypted ? "READY" : "PROCESSING",
+        encrypted,
         versions: { create: { version: "v1.0", storageKey: key, sizeBytes: BigInt(body.byteLength), authorId: auth.userId } },
       },
       include: fileInclude,
     });
     // Worker flips PROCESSING -> READY (metadata/preview pipeline).
-    await enqueue(QUEUES.files, { kind: "process-upload", fileId: f.id }, `process-upload:${f.id}`);
+    // BullMQ rejects custom job ids containing ":" (its Redis key separator).
+    if (!encrypted) {
+      await enqueue(QUEUES.files, { kind: "process-upload", fileId: f.id }, `process-upload-${f.id}`);
+    }
     return this.toDto(auth, f, true);
   }
 

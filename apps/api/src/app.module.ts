@@ -4,10 +4,14 @@ import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler";
 import { PrismaService } from "./common/prisma.service";
 import { SessionService } from "./common/session.service";
 import { SessionGuard } from "./common/session.guard";
+import { JwtTokenService } from "./common/jwt-token.service";
 import { CsrfMiddleware } from "./common/csrf.middleware";
 import { OutboxService } from "./common/outbox.service";
 import { AuthController } from "./modules/auth/auth.controller";
 import { AuthService } from "./modules/auth/auth.service";
+import { PasswordResetService } from "./modules/auth/password-reset.service";
+import { JwksController } from "./modules/auth/jwks.controller";
+import { MailerService } from "./common/mailer.service";
 import { UsersController } from "./modules/users/users.controller";
 import { UsersService } from "./modules/users/users.service";
 import { ConversationsController } from "./modules/conversations/conversations.controller";
@@ -30,11 +34,16 @@ import { AdminController } from "./modules/admin/admin.controller";
 import { AdminService } from "./modules/admin/admin.service";
 import { HealthController } from "./modules/health/health.controller";
 import { RealtimeGateway } from "./realtime/realtime.gateway";
+import { PresenceService } from "./realtime/presence.service";
+import { MessageReceiptService } from "./modules/messages/message-receipt.service";
+import { E2EEController } from "./modules/e2ee/e2ee.controller";
+import { E2EEService } from "./modules/e2ee/e2ee.service";
 
 @Module({
   imports: [ThrottlerModule.forRoot([{ ttl: 60_000, limit: 300 }])],
   controllers: [
     AuthController,
+    JwksController,
     UsersController,
     ConversationsController,
     MessagesController,
@@ -46,12 +55,16 @@ import { RealtimeGateway } from "./realtime/realtime.gateway";
     SettingsController,
     AdminController,
     HealthController,
+    E2EEController,
   ],
   providers: [
     PrismaService,
     SessionService,
+    JwtTokenService,
     OutboxService,
     AuthService,
+    PasswordResetService,
+    MailerService,
     UsersService,
     ConversationsService,
     MessagesService,
@@ -63,6 +76,9 @@ import { RealtimeGateway } from "./realtime/realtime.gateway";
     SettingsService,
     AdminService,
     RealtimeGateway,
+    PresenceService,
+    MessageReceiptService,
+    E2EEService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: SessionGuard },
   ],

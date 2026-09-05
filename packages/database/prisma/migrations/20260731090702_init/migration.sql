@@ -1,700 +1,607 @@
--- CreateEnum
-CREATE TYPE "Presence" AS ENUM ('ONLINE', 'AWAY', 'BUSY', 'OFFLINE');
+-- CreateTable
+CREATE TABLE `organizations` (
+    `id` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `slug` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `storageQuotaBytes` BIGINT NOT NULL DEFAULT 10737418240,
 
--- CreateEnum
-CREATE TYPE "OrgRole" AS ENUM ('OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST');
-
--- CreateEnum
-CREATE TYPE "ConversationKind" AS ENUM ('DM', 'GROUP');
-
--- CreateEnum
-CREATE TYPE "MessageState" AS ENUM ('SENT', 'DELIVERED', 'READ');
-
--- CreateEnum
-CREATE TYPE "GroupPrivacy" AS ENUM ('PUBLIC', 'PRIVATE');
-
--- CreateEnum
-CREATE TYPE "FileStatus" AS ENUM ('UPLOADING', 'PROCESSING', 'READY', 'FAILED', 'TRASHED');
-
--- CreateEnum
-CREATE TYPE "CallState" AS ENUM ('RINGING', 'ACTIVE', 'ENDED');
+    UNIQUE INDEX `organizations_slug_key`(`slug`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "organizations" (
-    "id" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMPTZ NOT NULL,
-    "storageQuotaBytes" BIGINT NOT NULL DEFAULT 10737418240,
+CREATE TABLE `workspaces` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `icon` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "workspaces" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "icon" TEXT,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "workspaces_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `workspaces_organizationId_name_key`(`organizationId`, `name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "users" (
-    "id" UUID NOT NULL,
-    "email" TEXT NOT NULL,
-    "passwordHash" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "title" TEXT,
-    "department" TEXT,
-    "phone" TEXT,
-    "location" TEXT,
-    "timezone" TEXT NOT NULL DEFAULT 'UTC',
-    "about" TEXT,
-    "avatarColor" TEXT,
-    "presence" "Presence" NOT NULL DEFAULT 'OFFLINE',
-    "customStatus" TEXT,
-    "lastActiveAt" TIMESTAMPTZ,
-    "mfaEnabled" BOOLEAN NOT NULL DEFAULT false,
-    "mfaSecret" TEXT,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMPTZ NOT NULL,
+CREATE TABLE `users` (
+    `id` CHAR(36) NOT NULL,
+    `email` VARCHAR(191) NOT NULL,
+    `passwordHash` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) NULL,
+    `department` VARCHAR(191) NULL,
+    `phone` VARCHAR(191) NULL,
+    `location` VARCHAR(191) NULL,
+    `timezone` VARCHAR(191) NOT NULL DEFAULT 'UTC',
+    `about` TEXT NULL,
+    `avatarColor` VARCHAR(191) NULL,
+    `presence` ENUM('ONLINE', 'AWAY', 'BUSY', 'OFFLINE') NOT NULL DEFAULT 'OFFLINE',
+    `customStatus` VARCHAR(191) NULL,
+    `lastActiveAt` DATETIME(3) NULL,
+    `mfaEnabled` BOOLEAN NOT NULL DEFAULT false,
+    `mfaSecret` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
-    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "memberships" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "role" "OrgRole" NOT NULL DEFAULT 'MEMBER',
-    "suspended" BOOLEAN NOT NULL DEFAULT false,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "memberships_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `users_email_key`(`email`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "sessions" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "ip" TEXT,
-    "userAgent" TEXT,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "revokedAt" TIMESTAMPTZ,
+CREATE TABLE `memberships` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST') NOT NULL DEFAULT 'MEMBER',
+    `suspended` BOOLEAN NOT NULL DEFAULT false,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "devices" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "platform" TEXT NOT NULL,
-    "lastActive" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "current" BOOLEAN NOT NULL DEFAULT false,
-
-    CONSTRAINT "devices_pkey" PRIMARY KEY ("id")
-);
+    INDEX `memberships_organizationId_role_idx`(`organizationId`, `role`),
+    UNIQUE INDEX `memberships_userId_organizationId_key`(`userId`, `organizationId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "user_settings" (
-    "userId" UUID NOT NULL,
-    "theme" TEXT NOT NULL DEFAULT 'light',
-    "accent" TEXT NOT NULL DEFAULT 'purple',
-    "msgLayout" TEXT NOT NULL DEFAULT 'Comfortable',
-    "fontSize" INTEGER NOT NULL DEFAULT 14,
-    "wallpaper" TEXT NOT NULL DEFAULT 'Classic',
-    "openTo" TEXT NOT NULL DEFAULT 'Chats',
-    "startupLaunch" BOOLEAN NOT NULL DEFAULT true,
-    "startTray" BOOLEAN NOT NULL DEFAULT false,
-    "msgPreviews" BOOLEAN NOT NULL DEFAULT true,
-    "data" JSONB NOT NULL DEFAULT '{}',
+CREATE TABLE `sessions` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `tokenHash` VARCHAR(191) NOT NULL,
+    `ip` VARCHAR(191) NULL,
+    `userAgent` TEXT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `expiresAt` DATETIME(3) NOT NULL,
+    `revokedAt` DATETIME(3) NULL,
 
-    CONSTRAINT "user_settings_pkey" PRIMARY KEY ("userId")
-);
-
--- CreateTable
-CREATE TABLE "contacts" (
-    "id" UUID NOT NULL,
-    "ownerId" UUID NOT NULL,
-    "targetId" UUID NOT NULL,
-    "favorite" BOOLEAN NOT NULL DEFAULT false,
-    "blocked" BOOLEAN NOT NULL DEFAULT false,
-    "notes" TEXT,
-    "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "contacts_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `sessions_tokenHash_key`(`tokenHash`),
+    INDEX `sessions_userId_expiresAt_idx`(`userId`, `expiresAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "conversations" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "kind" "ConversationKind" NOT NULL,
-    "slug" TEXT,
-    "pinnedMessageId" UUID,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMPTZ NOT NULL,
+CREATE TABLE `devices` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `platform` VARCHAR(191) NOT NULL,
+    `lastActive` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `current` BOOLEAN NOT NULL DEFAULT false,
 
-    CONSTRAINT "conversations_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "conversation_participants" (
-    "id" UUID NOT NULL,
-    "conversationId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "role" "OrgRole" NOT NULL DEFAULT 'MEMBER',
-    "lastReadAt" TIMESTAMPTZ,
-    "muted" BOOLEAN NOT NULL DEFAULT false,
-    "archived" BOOLEAN NOT NULL DEFAULT false,
-    "favorite" BOOLEAN NOT NULL DEFAULT false,
-    "joinedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "conversation_participants_pkey" PRIMARY KEY ("id")
-);
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "messages" (
-    "id" UUID NOT NULL,
-    "conversationId" UUID NOT NULL,
-    "senderId" UUID NOT NULL,
-    "text" TEXT,
-    "replyToId" UUID,
-    "idempotencyKey" TEXT,
-    "state" "MessageState" NOT NULL DEFAULT 'SENT',
-    "editedAt" TIMESTAMPTZ,
-    "deletedAt" TIMESTAMPTZ,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `user_settings` (
+    `userId` CHAR(36) NOT NULL,
+    `theme` VARCHAR(191) NOT NULL DEFAULT 'light',
+    `accent` VARCHAR(191) NOT NULL DEFAULT 'purple',
+    `msgLayout` VARCHAR(191) NOT NULL DEFAULT 'Comfortable',
+    `fontSize` INTEGER NOT NULL DEFAULT 14,
+    `wallpaper` VARCHAR(191) NOT NULL DEFAULT 'Classic',
+    `openTo` VARCHAR(191) NOT NULL DEFAULT 'Chats',
+    `startupLaunch` BOOLEAN NOT NULL DEFAULT true,
+    `startTray` BOOLEAN NOT NULL DEFAULT false,
+    `msgPreviews` BOOLEAN NOT NULL DEFAULT true,
+    `data` JSON NOT NULL,
 
-    CONSTRAINT "messages_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "message_receipts" (
-    "messageId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "readAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "message_receipts_pkey" PRIMARY KEY ("messageId","userId")
-);
+    PRIMARY KEY (`userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "message_attachments" (
-    "id" UUID NOT NULL,
-    "messageId" UUID NOT NULL,
-    "fileId" UUID NOT NULL,
+CREATE TABLE `contacts` (
+    `id` CHAR(36) NOT NULL,
+    `ownerId` CHAR(36) NOT NULL,
+    `targetId` CHAR(36) NOT NULL,
+    `favorite` BOOLEAN NOT NULL DEFAULT false,
+    `blocked` BOOLEAN NOT NULL DEFAULT false,
+    `notes` TEXT NULL,
+    `tags` JSON NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "message_attachments_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "message_reactions" (
-    "id" UUID NOT NULL,
-    "messageId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "emoji" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "message_reactions_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `contacts_ownerId_targetId_key`(`ownerId`, `targetId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "polls" (
-    "id" UUID NOT NULL,
-    "messageId" UUID NOT NULL,
-    "question" TEXT NOT NULL,
-    "closesAt" TIMESTAMPTZ,
+CREATE TABLE `conversations` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `kind` ENUM('DM', 'GROUP') NOT NULL,
+    `slug` VARCHAR(191) NULL,
+    `pinnedMessageId` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
 
-    CONSTRAINT "polls_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "poll_options" (
-    "id" UUID NOT NULL,
-    "pollId" UUID NOT NULL,
-    "label" TEXT NOT NULL,
-    "order" INTEGER NOT NULL,
-
-    CONSTRAINT "poll_options_pkey" PRIMARY KEY ("id")
-);
+    INDEX `conversations_organizationId_updatedAt_idx`(`organizationId`, `updatedAt`),
+    UNIQUE INDEX `conversations_organizationId_slug_key`(`organizationId`, `slug`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "poll_votes" (
-    "id" UUID NOT NULL,
-    "optionId" UUID NOT NULL,
-    "pollId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
+CREATE TABLE `conversation_participants` (
+    `id` CHAR(36) NOT NULL,
+    `conversationId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST') NOT NULL DEFAULT 'MEMBER',
+    `lastReadAt` DATETIME(3) NULL,
+    `muted` BOOLEAN NOT NULL DEFAULT false,
+    `archived` BOOLEAN NOT NULL DEFAULT false,
+    `favorite` BOOLEAN NOT NULL DEFAULT false,
+    `joinedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "poll_votes_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "groups" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "conversationId" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "code" TEXT,
-    "icon" TEXT,
-    "avatarColor" TEXT,
-    "privacy" "GroupPrivacy" NOT NULL DEFAULT 'PRIVATE',
-    "description" TEXT,
-    "tags" TEXT[] DEFAULT ARRAY[]::TEXT[],
-    "archived" BOOLEAN NOT NULL DEFAULT false,
-    "createdById" UUID,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "groups_pkey" PRIMARY KEY ("id")
-);
+    INDEX `conversation_participants_userId_archived_idx`(`userId`, `archived`),
+    UNIQUE INDEX `conversation_participants_conversationId_userId_key`(`conversationId`, `userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "group_members" (
-    "id" UUID NOT NULL,
-    "groupId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "role" "OrgRole" NOT NULL DEFAULT 'MEMBER',
+CREATE TABLE `messages` (
+    `id` CHAR(36) NOT NULL,
+    `conversationId` CHAR(36) NOT NULL,
+    `senderId` CHAR(36) NOT NULL,
+    `text` TEXT NULL,
+    `replyToId` CHAR(36) NULL,
+    `idempotencyKey` VARCHAR(191) NULL,
+    `state` ENUM('SENT', 'DELIVERED', 'READ') NOT NULL DEFAULT 'SENT',
+    `editedAt` DATETIME(3) NULL,
+    `deletedAt` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "group_members_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "group_events" (
-    "id" UUID NOT NULL,
-    "groupId" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "startsAt" TIMESTAMPTZ NOT NULL,
-    "location" TEXT,
-
-    CONSTRAINT "group_events_pkey" PRIMARY KEY ("id")
-);
+    INDEX `messages_conversationId_createdAt_idx`(`conversationId`, `createdAt`),
+    UNIQUE INDEX `messages_conversationId_senderId_idempotencyKey_key`(`conversationId`, `senderId`, `idempotencyKey`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "group_announcements" (
-    "id" UUID NOT NULL,
-    "groupId" UUID NOT NULL,
-    "authorId" UUID,
-    "title" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `message_receipts` (
+    `messageId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `readAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "group_announcements_pkey" PRIMARY KEY ("id")
-);
+    PRIMARY KEY (`messageId`, `userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "statuses" (
-    "id" UUID NOT NULL,
-    "ownerId" UUID NOT NULL,
-    "caption" TEXT,
-    "mediaFileId" UUID,
-    "mediaStyle" TEXT,
-    "audience" TEXT NOT NULL DEFAULT 'org',
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "expiresAt" TIMESTAMPTZ NOT NULL,
-    "deletedAt" TIMESTAMPTZ,
+CREATE TABLE `message_attachments` (
+    `id` CHAR(36) NOT NULL,
+    `messageId` CHAR(36) NOT NULL,
+    `fileId` CHAR(36) NOT NULL,
 
-    CONSTRAINT "statuses_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `message_attachments_messageId_fileId_key`(`messageId`, `fileId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "status_views" (
-    "statusId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "viewedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `message_reactions` (
+    `id` CHAR(36) NOT NULL,
+    `messageId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `emoji` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "status_views_pkey" PRIMARY KEY ("statusId","userId")
-);
-
--- CreateTable
-CREATE TABLE "status_reactions" (
-    "id" UUID NOT NULL,
-    "statusId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "emoji" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "status_reactions_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `message_reactions_messageId_userId_emoji_key`(`messageId`, `userId`, `emoji`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "files" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "workspaceId" UUID,
-    "ownerId" UUID NOT NULL,
-    "name" TEXT NOT NULL,
-    "type" TEXT NOT NULL,
-    "mime" TEXT NOT NULL,
-    "sizeBytes" BIGINT NOT NULL,
-    "storageKey" TEXT NOT NULL,
-    "checksum" TEXT,
-    "status" "FileStatus" NOT NULL DEFAULT 'UPLOADING',
-    "sharedIn" TEXT,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMPTZ NOT NULL,
-    "trashedAt" TIMESTAMPTZ,
+CREATE TABLE `polls` (
+    `id` CHAR(36) NOT NULL,
+    `messageId` CHAR(36) NOT NULL,
+    `question` TEXT NOT NULL,
+    `closesAt` DATETIME(3) NULL,
 
-    CONSTRAINT "files_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `polls_messageId_key`(`messageId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "file_versions" (
-    "id" UUID NOT NULL,
-    "fileId" UUID NOT NULL,
-    "version" TEXT NOT NULL,
-    "storageKey" TEXT NOT NULL,
-    "sizeBytes" BIGINT NOT NULL,
-    "authorId" UUID,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `poll_options` (
+    `id` CHAR(36) NOT NULL,
+    `pollId` CHAR(36) NOT NULL,
+    `label` VARCHAR(191) NOT NULL,
+    `order` INTEGER NOT NULL,
 
-    CONSTRAINT "file_versions_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `poll_options_pollId_order_key`(`pollId`, `order`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "file_comments" (
-    "id" UUID NOT NULL,
-    "fileId" UUID NOT NULL,
-    "authorId" UUID NOT NULL,
-    "body" TEXT NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `poll_votes` (
+    `id` CHAR(36) NOT NULL,
+    `optionId` CHAR(36) NOT NULL,
+    `pollId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
 
-    CONSTRAINT "file_comments_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "file_stars" (
-    "fileId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-
-    CONSTRAINT "file_stars_pkey" PRIMARY KEY ("fileId","userId")
-);
+    UNIQUE INDEX `poll_votes_pollId_userId_key`(`pollId`, `userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "calls" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "conversationId" UUID,
-    "kind" "ConversationKind" NOT NULL,
-    "roomName" TEXT NOT NULL,
-    "state" "CallState" NOT NULL DEFAULT 'RINGING',
-    "startedById" UUID NOT NULL,
-    "startedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "endedAt" TIMESTAMPTZ,
+CREATE TABLE `groups` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `conversationId` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `code` VARCHAR(191) NULL,
+    `icon` VARCHAR(191) NULL,
+    `avatarColor` VARCHAR(191) NULL,
+    `privacy` ENUM('PUBLIC', 'PRIVATE') NOT NULL DEFAULT 'PRIVATE',
+    `description` TEXT NULL,
+    `tags` JSON NULL,
+    `archived` BOOLEAN NOT NULL DEFAULT false,
+    `createdById` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "calls_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "call_participants" (
-    "id" UUID NOT NULL,
-    "callId" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "joinedAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "leftAt" TIMESTAMPTZ,
-
-    CONSTRAINT "call_participants_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `groups_conversationId_key`(`conversationId`),
+    UNIQUE INDEX `groups_organizationId_name_key`(`organizationId`, `name`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "notifications" (
-    "id" UUID NOT NULL,
-    "userId" UUID NOT NULL,
-    "actorId" UUID,
-    "type" TEXT NOT NULL,
-    "title" TEXT NOT NULL,
-    "body" TEXT NOT NULL,
-    "deepLink" TEXT,
-    "readAt" TIMESTAMPTZ,
-    "archivedAt" TIMESTAMPTZ,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `group_members` (
+    `id` CHAR(36) NOT NULL,
+    `groupId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `role` ENUM('OWNER', 'ADMIN', 'MODERATOR', 'MEMBER', 'GUEST') NOT NULL DEFAULT 'MEMBER',
 
-    CONSTRAINT "notifications_pkey" PRIMARY KEY ("id")
-);
+    UNIQUE INDEX `group_members_groupId_userId_key`(`groupId`, `userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "audit_logs" (
-    "id" UUID NOT NULL,
-    "organizationId" UUID NOT NULL,
-    "actorId" UUID,
-    "action" TEXT NOT NULL,
-    "target" TEXT,
-    "metadata" JSONB NOT NULL DEFAULT '{}',
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `group_events` (
+    `id` CHAR(36) NOT NULL,
+    `groupId` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `startsAt` DATETIME(3) NOT NULL,
+    `location` VARCHAR(191) NULL,
 
-    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
-);
+    INDEX `group_events_groupId_startsAt_idx`(`groupId`, `startsAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- CreateTable
-CREATE TABLE "outbox_events" (
-    "id" UUID NOT NULL,
-    "topic" TEXT NOT NULL,
-    "payload" JSONB NOT NULL,
-    "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "processedAt" TIMESTAMPTZ,
+CREATE TABLE `group_announcements` (
+    `id` CHAR(36) NOT NULL,
+    `groupId` CHAR(36) NOT NULL,
+    `authorId` CHAR(36) NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
-    CONSTRAINT "outbox_events_pkey" PRIMARY KEY ("id")
-);
+    INDEX `group_announcements_groupId_createdAt_idx`(`groupId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "organizations_slug_key" ON "organizations"("slug");
+-- CreateTable
+CREATE TABLE `statuses` (
+    `id` CHAR(36) NOT NULL,
+    `ownerId` CHAR(36) NOT NULL,
+    `caption` TEXT NULL,
+    `mediaFileId` CHAR(36) NULL,
+    `mediaStyle` VARCHAR(191) NULL,
+    `audience` VARCHAR(191) NOT NULL DEFAULT 'org',
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `expiresAt` DATETIME(3) NOT NULL,
+    `deletedAt` DATETIME(3) NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "workspaces_organizationId_name_key" ON "workspaces"("organizationId", "name");
+    INDEX `statuses_ownerId_expiresAt_idx`(`ownerId`, `expiresAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+-- CreateTable
+CREATE TABLE `status_views` (
+    `statusId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `viewedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE INDEX "memberships_organizationId_role_idx" ON "memberships"("organizationId", "role");
+    PRIMARY KEY (`statusId`, `userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "memberships_userId_organizationId_key" ON "memberships"("userId", "organizationId");
+-- CreateTable
+CREATE TABLE `status_reactions` (
+    `id` CHAR(36) NOT NULL,
+    `statusId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `emoji` VARCHAR(191) NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "sessions_tokenHash_key" ON "sessions"("tokenHash");
+    INDEX `status_reactions_statusId_emoji_idx`(`statusId`, `emoji`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "sessions_userId_expiresAt_idx" ON "sessions"("userId", "expiresAt");
+-- CreateTable
+CREATE TABLE `files` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `workspaceId` CHAR(36) NULL,
+    `ownerId` CHAR(36) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
+    `type` VARCHAR(191) NOT NULL,
+    `mime` VARCHAR(191) NOT NULL,
+    `sizeBytes` BIGINT NOT NULL,
+    `storageKey` VARCHAR(191) NOT NULL,
+    `checksum` VARCHAR(191) NULL,
+    `status` ENUM('UPLOADING', 'PROCESSING', 'READY', 'FAILED', 'TRASHED') NOT NULL DEFAULT 'UPLOADING',
+    `sharedIn` VARCHAR(191) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+    `trashedAt` DATETIME(3) NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "contacts_ownerId_targetId_key" ON "contacts"("ownerId", "targetId");
+    UNIQUE INDEX `files_storageKey_key`(`storageKey`),
+    INDEX `files_organizationId_status_updatedAt_idx`(`organizationId`, `status`, `updatedAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "conversations_organizationId_updatedAt_idx" ON "conversations"("organizationId", "updatedAt");
+-- CreateTable
+CREATE TABLE `file_versions` (
+    `id` CHAR(36) NOT NULL,
+    `fileId` CHAR(36) NOT NULL,
+    `version` VARCHAR(191) NOT NULL,
+    `storageKey` VARCHAR(191) NOT NULL,
+    `sizeBytes` BIGINT NOT NULL,
+    `authorId` CHAR(36) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "conversations_organizationId_slug_key" ON "conversations"("organizationId", "slug");
+    UNIQUE INDEX `file_versions_fileId_version_key`(`fileId`, `version`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "conversation_participants_userId_archived_idx" ON "conversation_participants"("userId", "archived");
+-- CreateTable
+CREATE TABLE `file_comments` (
+    `id` CHAR(36) NOT NULL,
+    `fileId` CHAR(36) NOT NULL,
+    `authorId` CHAR(36) NOT NULL,
+    `body` TEXT NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "conversation_participants_conversationId_userId_key" ON "conversation_participants"("conversationId", "userId");
+    INDEX `file_comments_fileId_createdAt_idx`(`fileId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "messages_conversationId_createdAt_idx" ON "messages"("conversationId", "createdAt");
+-- CreateTable
+CREATE TABLE `file_stars` (
+    `fileId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "messages_conversationId_senderId_idempotencyKey_key" ON "messages"("conversationId", "senderId", "idempotencyKey");
+    PRIMARY KEY (`fileId`, `userId`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "message_attachments_messageId_fileId_key" ON "message_attachments"("messageId", "fileId");
+-- CreateTable
+CREATE TABLE `calls` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `conversationId` CHAR(36) NULL,
+    `kind` ENUM('DM', 'GROUP') NOT NULL,
+    `roomName` VARCHAR(191) NOT NULL,
+    `state` ENUM('RINGING', 'ACTIVE', 'ENDED') NOT NULL DEFAULT 'RINGING',
+    `startedById` CHAR(36) NOT NULL,
+    `startedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `endedAt` DATETIME(3) NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "message_reactions_messageId_userId_emoji_key" ON "message_reactions"("messageId", "userId", "emoji");
+    UNIQUE INDEX `calls_roomName_key`(`roomName`),
+    INDEX `calls_organizationId_startedAt_idx`(`organizationId`, `startedAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "polls_messageId_key" ON "polls"("messageId");
+-- CreateTable
+CREATE TABLE `call_participants` (
+    `id` CHAR(36) NOT NULL,
+    `callId` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `joinedAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `leftAt` DATETIME(3) NULL,
 
--- CreateIndex
-CREATE UNIQUE INDEX "poll_options_pollId_order_key" ON "poll_options"("pollId", "order");
+    UNIQUE INDEX `call_participants_callId_userId_key`(`callId`, `userId`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "poll_votes_pollId_userId_key" ON "poll_votes"("pollId", "userId");
+-- CreateTable
+CREATE TABLE `notifications` (
+    `id` CHAR(36) NOT NULL,
+    `userId` CHAR(36) NOT NULL,
+    `actorId` CHAR(36) NULL,
+    `type` VARCHAR(191) NOT NULL,
+    `title` VARCHAR(191) NOT NULL,
+    `body` TEXT NOT NULL,
+    `deepLink` VARCHAR(191) NULL,
+    `readAt` DATETIME(3) NULL,
+    `archivedAt` DATETIME(3) NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "groups_conversationId_key" ON "groups"("conversationId");
+    INDEX `notifications_userId_readAt_createdAt_idx`(`userId`, `readAt`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE UNIQUE INDEX "groups_organizationId_name_key" ON "groups"("organizationId", "name");
+-- CreateTable
+CREATE TABLE `audit_logs` (
+    `id` CHAR(36) NOT NULL,
+    `organizationId` CHAR(36) NOT NULL,
+    `actorId` CHAR(36) NULL,
+    `action` VARCHAR(191) NOT NULL,
+    `target` VARCHAR(191) NULL,
+    `metadata` JSON NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
 
--- CreateIndex
-CREATE UNIQUE INDEX "group_members_groupId_userId_key" ON "group_members"("groupId", "userId");
+    INDEX `audit_logs_organizationId_createdAt_idx`(`organizationId`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
--- CreateIndex
-CREATE INDEX "group_events_groupId_startsAt_idx" ON "group_events"("groupId", "startsAt");
+-- CreateTable
+CREATE TABLE `outbox_events` (
+    `id` CHAR(36) NOT NULL,
+    `topic` VARCHAR(191) NOT NULL,
+    `payload` JSON NOT NULL,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `processedAt` DATETIME(3) NULL,
 
--- CreateIndex
-CREATE INDEX "group_announcements_groupId_createdAt_idx" ON "group_announcements"("groupId", "createdAt");
-
--- CreateIndex
-CREATE INDEX "statuses_ownerId_expiresAt_idx" ON "statuses"("ownerId", "expiresAt");
-
--- CreateIndex
-CREATE INDEX "status_reactions_statusId_emoji_idx" ON "status_reactions"("statusId", "emoji");
-
--- CreateIndex
-CREATE UNIQUE INDEX "files_storageKey_key" ON "files"("storageKey");
-
--- CreateIndex
-CREATE INDEX "files_organizationId_status_updatedAt_idx" ON "files"("organizationId", "status", "updatedAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "file_versions_fileId_version_key" ON "file_versions"("fileId", "version");
-
--- CreateIndex
-CREATE INDEX "file_comments_fileId_createdAt_idx" ON "file_comments"("fileId", "createdAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "calls_roomName_key" ON "calls"("roomName");
-
--- CreateIndex
-CREATE INDEX "calls_organizationId_startedAt_idx" ON "calls"("organizationId", "startedAt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "call_participants_callId_userId_key" ON "call_participants"("callId", "userId");
-
--- CreateIndex
-CREATE INDEX "notifications_userId_readAt_createdAt_idx" ON "notifications"("userId", "readAt", "createdAt");
-
--- CreateIndex
-CREATE INDEX "audit_logs_organizationId_createdAt_idx" ON "audit_logs"("organizationId", "createdAt");
-
--- CreateIndex
-CREATE INDEX "outbox_events_processedAt_createdAt_idx" ON "outbox_events"("processedAt", "createdAt");
-
--- AddForeignKey
-ALTER TABLE "workspaces" ADD CONSTRAINT "workspaces_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "memberships" ADD CONSTRAINT "memberships_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "devices" ADD CONSTRAINT "devices_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "user_settings" ADD CONSTRAINT "user_settings_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "contacts" ADD CONSTRAINT "contacts_targetId_fkey" FOREIGN KEY ("targetId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversations" ADD CONSTRAINT "conversations_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "messages" ADD CONSTRAINT "messages_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "messages" ADD CONSTRAINT "messages_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "messages" ADD CONSTRAINT "messages_replyToId_fkey" FOREIGN KEY ("replyToId") REFERENCES "messages"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_receipts" ADD CONSTRAINT "message_receipts_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_receipts" ADD CONSTRAINT "message_receipts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_attachments" ADD CONSTRAINT "message_attachments_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_attachments" ADD CONSTRAINT "message_attachments_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "files"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_reactions" ADD CONSTRAINT "message_reactions_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "message_reactions" ADD CONSTRAINT "message_reactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "polls" ADD CONSTRAINT "polls_messageId_fkey" FOREIGN KEY ("messageId") REFERENCES "messages"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+    INDEX `outbox_events_processedAt_createdAt_idx`(`processedAt`, `createdAt`),
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- AddForeignKey
-ALTER TABLE "poll_options" ADD CONSTRAINT "poll_options_pollId_fkey" FOREIGN KEY ("pollId") REFERENCES "polls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `workspaces` ADD CONSTRAINT `workspaces_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "poll_votes" ADD CONSTRAINT "poll_votes_optionId_fkey" FOREIGN KEY ("optionId") REFERENCES "poll_options"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `memberships` ADD CONSTRAINT `memberships_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "poll_votes" ADD CONSTRAINT "poll_votes_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `memberships` ADD CONSTRAINT `memberships_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "groups" ADD CONSTRAINT "groups_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `sessions` ADD CONSTRAINT `sessions_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "groups" ADD CONSTRAINT "groups_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "conversations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `devices` ADD CONSTRAINT `devices_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "group_members" ADD CONSTRAINT "group_members_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `user_settings` ADD CONSTRAINT `user_settings_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "group_members" ADD CONSTRAINT "group_members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `contacts` ADD CONSTRAINT `contacts_ownerId_fkey` FOREIGN KEY (`ownerId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "group_events" ADD CONSTRAINT "group_events_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `contacts` ADD CONSTRAINT `contacts_targetId_fkey` FOREIGN KEY (`targetId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "group_announcements" ADD CONSTRAINT "group_announcements_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `conversations` ADD CONSTRAINT `conversations_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "statuses" ADD CONSTRAINT "statuses_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `conversation_participants` ADD CONSTRAINT `conversation_participants_conversationId_fkey` FOREIGN KEY (`conversationId`) REFERENCES `conversations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "status_views" ADD CONSTRAINT "status_views_statusId_fkey" FOREIGN KEY ("statusId") REFERENCES "statuses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `conversation_participants` ADD CONSTRAINT `conversation_participants_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "status_views" ADD CONSTRAINT "status_views_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `messages` ADD CONSTRAINT `messages_conversationId_fkey` FOREIGN KEY (`conversationId`) REFERENCES `conversations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "status_reactions" ADD CONSTRAINT "status_reactions_statusId_fkey" FOREIGN KEY ("statusId") REFERENCES "statuses"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `messages` ADD CONSTRAINT `messages_senderId_fkey` FOREIGN KEY (`senderId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "status_reactions" ADD CONSTRAINT "status_reactions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `messages` ADD CONSTRAINT `messages_replyToId_fkey` FOREIGN KEY (`replyToId`) REFERENCES `messages`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "files" ADD CONSTRAINT "files_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `message_receipts` ADD CONSTRAINT `message_receipts_messageId_fkey` FOREIGN KEY (`messageId`) REFERENCES `messages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "files" ADD CONSTRAINT "files_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "workspaces"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `message_receipts` ADD CONSTRAINT `message_receipts_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "files" ADD CONSTRAINT "files_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `message_attachments` ADD CONSTRAINT `message_attachments_messageId_fkey` FOREIGN KEY (`messageId`) REFERENCES `messages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "file_versions" ADD CONSTRAINT "file_versions_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "files"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `message_attachments` ADD CONSTRAINT `message_attachments_fileId_fkey` FOREIGN KEY (`fileId`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "file_comments" ADD CONSTRAINT "file_comments_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "files"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `message_reactions` ADD CONSTRAINT `message_reactions_messageId_fkey` FOREIGN KEY (`messageId`) REFERENCES `messages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "file_comments" ADD CONSTRAINT "file_comments_authorId_fkey" FOREIGN KEY ("authorId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `message_reactions` ADD CONSTRAINT `message_reactions_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "file_stars" ADD CONSTRAINT "file_stars_fileId_fkey" FOREIGN KEY ("fileId") REFERENCES "files"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `polls` ADD CONSTRAINT `polls_messageId_fkey` FOREIGN KEY (`messageId`) REFERENCES `messages`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "file_stars" ADD CONSTRAINT "file_stars_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `poll_options` ADD CONSTRAINT `poll_options_pollId_fkey` FOREIGN KEY (`pollId`) REFERENCES `polls`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "call_participants" ADD CONSTRAINT "call_participants_callId_fkey" FOREIGN KEY ("callId") REFERENCES "calls"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `poll_votes` ADD CONSTRAINT `poll_votes_optionId_fkey` FOREIGN KEY (`optionId`) REFERENCES `poll_options`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "call_participants" ADD CONSTRAINT "call_participants_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `poll_votes` ADD CONSTRAINT `poll_votes_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `groups` ADD CONSTRAINT `groups_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "notifications" ADD CONSTRAINT "notifications_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `groups` ADD CONSTRAINT `groups_conversationId_fkey` FOREIGN KEY (`conversationId`) REFERENCES `conversations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE `group_members` ADD CONSTRAINT `group_members_groupId_fkey` FOREIGN KEY (`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "audit_logs" ADD CONSTRAINT "audit_logs_actorId_fkey" FOREIGN KEY ("actorId") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE `group_members` ADD CONSTRAINT `group_members_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `group_events` ADD CONSTRAINT `group_events_groupId_fkey` FOREIGN KEY (`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `group_announcements` ADD CONSTRAINT `group_announcements_groupId_fkey` FOREIGN KEY (`groupId`) REFERENCES `groups`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `statuses` ADD CONSTRAINT `statuses_ownerId_fkey` FOREIGN KEY (`ownerId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `status_views` ADD CONSTRAINT `status_views_statusId_fkey` FOREIGN KEY (`statusId`) REFERENCES `statuses`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `status_views` ADD CONSTRAINT `status_views_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `status_reactions` ADD CONSTRAINT `status_reactions_statusId_fkey` FOREIGN KEY (`statusId`) REFERENCES `statuses`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `status_reactions` ADD CONSTRAINT `status_reactions_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `files` ADD CONSTRAINT `files_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `files` ADD CONSTRAINT `files_workspaceId_fkey` FOREIGN KEY (`workspaceId`) REFERENCES `workspaces`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `files` ADD CONSTRAINT `files_ownerId_fkey` FOREIGN KEY (`ownerId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `file_versions` ADD CONSTRAINT `file_versions_fileId_fkey` FOREIGN KEY (`fileId`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `file_comments` ADD CONSTRAINT `file_comments_fileId_fkey` FOREIGN KEY (`fileId`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `file_comments` ADD CONSTRAINT `file_comments_authorId_fkey` FOREIGN KEY (`authorId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `file_stars` ADD CONSTRAINT `file_stars_fileId_fkey` FOREIGN KEY (`fileId`) REFERENCES `files`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `file_stars` ADD CONSTRAINT `file_stars_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `call_participants` ADD CONSTRAINT `call_participants_callId_fkey` FOREIGN KEY (`callId`) REFERENCES `calls`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `call_participants` ADD CONSTRAINT `call_participants_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `notifications` ADD CONSTRAINT `notifications_userId_fkey` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `notifications` ADD CONSTRAINT `notifications_actorId_fkey` FOREIGN KEY (`actorId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `audit_logs` ADD CONSTRAINT `audit_logs_organizationId_fkey` FOREIGN KEY (`organizationId`) REFERENCES `organizations`(`id`) ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE `audit_logs` ADD CONSTRAINT `audit_logs_actorId_fkey` FOREIGN KEY (`actorId`) REFERENCES `users`(`id`) ON DELETE SET NULL ON UPDATE CASCADE;

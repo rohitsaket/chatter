@@ -8,12 +8,13 @@
     "build": "prisma generate && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "db:migrate": "prisma migrate deploy",
-    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate deploy",
+    "db:migrate:dev": "node --env-file-if-exists=../../.env node_modules/prisma/build/index.js migrate dev",
     "db:seed": "node --env-file-if-exists=../../.env dist/seed.js",
     "db:generate": "prisma generate"
   },
   "dependencies": {
+    "@chatter/config": "workspace:*",
     "@prisma/client": "^6.19.1",
     "argon2": "^0.44.0"
   },

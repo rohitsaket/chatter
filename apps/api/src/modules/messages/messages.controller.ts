@@ -1,13 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query } from "@nestjs/common";
 import { z } from "zod";
 import { reactBody, sendMessageBody, voteBody, type SendMessageBody } from "@chatter/contracts";
-import { boundedText } from "@chatter/validation";
 import { CurrentUser } from "../../common/current-user.decorator";
 import type { AuthedUser } from "../../common/session.service";
 import { ZodPipe } from "../../common/zod.pipe";
 import { MessagesService } from "./messages.service";
 
-const editBody = z.object({ text: boundedText(8000) });
+const editBody = z.object({ encryptedEnvelope: sendMessageBody.shape.encryptedEnvelope }).strict();
 
 @Controller()
 export class MessagesController {
@@ -37,9 +36,9 @@ export class MessagesController {
   edit(
     @CurrentUser() user: AuthedUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body(new ZodPipe(editBody)) body: { text: string },
+    @Body(new ZodPipe(editBody)) body: z.infer<typeof editBody>,
   ) {
-    return this.messages.edit(user, id, body.text);
+    return this.messages.edit(user, id, body.encryptedEnvelope);
   }
 
   @Delete("messages/:id")

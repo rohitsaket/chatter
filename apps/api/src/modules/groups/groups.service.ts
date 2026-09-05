@@ -5,6 +5,8 @@ import type { Prisma } from "@chatter/database";
 import { PrismaService } from "../../common/prisma.service";
 import type { AuthedUser } from "../../common/session.service";
 import { initials } from "../users/users.service";
+import { RealtimeGateway } from "../../realtime/realtime.gateway";
+import { RT } from "@chatter/realtime";
 
 const groupInclude = {
   conversation: { include: { participants: true } },
@@ -18,7 +20,10 @@ type GroupWithRels = Prisma.GroupGetPayload<{ include: typeof groupInclude }>;
 
 @Injectable()
 export class GroupsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly rt: RealtimeGateway,
+  ) {}
 
   private async toDto(auth: AuthedUser, g: GroupWithRels, detailed: boolean): Promise<GroupDto> {
     const mine = g.conversation.participants.find((p) => p.userId === auth.userId);
@@ -49,7 +54,7 @@ export class GroupsService {
       avatarColor: g.avatarColor,
       privacy: g.privacy,
       description: g.description,
-      tags: g.tags,
+      tags: (g.tags as string[] | null) ?? [],
       memberCount: g.members.length,
       onlineCount: g.members.filter((m) => m.user.presence === "ONLINE").length,
       unreadCount,
@@ -57,7 +62,7 @@ export class GroupsService {
       createdAt: g.createdAt.toISOString(),
       lastActivity: last
         ? {
-            text: `${last.sender.name.split(" ")[0]}: ${last.attachments.length ? "Shared a file" : (last.text ?? "").slice(0, 60)}`,
+            text: `${last.sender.name.split(" ")[0]}: ${last.text ? last.text.slice(0, 60) : "Encrypted message"}`,
             at: last.createdAt.toISOString(),
           }
         : null,
@@ -160,6 +165,8 @@ export class GroupsService {
         create: { conversationId: g.conversationId, userId },
       }),
     ]);
+    await this.rt.joinUserToConversation(userId, g.conversationId);
+    this.rt.emitToConversation(g.conversationId, RT.conversationUpdated, { conversationId: g.conversationId, membershipChanged: true });
     return { ok: true };
   }
 
@@ -174,6 +181,8 @@ export class GroupsService {
         where: { conversationId: g.conversationId, userId: auth.userId },
       }),
     ]);
+    await this.rt.leaveUserFromConversation(auth.userId, g.conversationId);
+    this.rt.emitToConversation(g.conversationId, RT.conversationUpdated, { conversationId: g.conversationId, membershipChanged: true });
     return { ok: true };
   }
 }

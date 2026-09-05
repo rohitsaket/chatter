@@ -1,5 +1,6 @@
 import "reflect-metadata";
 import { NestFactory } from "@nestjs/core";
+import { RequestMethod } from "@nestjs/common";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cookieParser from "cookie-parser";
 import helmet from "helmet";
@@ -19,7 +20,9 @@ async function bootstrap() {
   app.use(cookieParser(env.SESSION_SECRET));
   app.use(requestObservability());
   app.enableCors({ origin: env.WEB_ORIGIN, credentials: true });
-  app.setGlobalPrefix("api/v1", { exclude: ["health", "metrics"] });
+  app.setGlobalPrefix("api/v1", {
+    exclude: ["health", "metrics", { path: ".well-known/jwks.json", method: RequestMethod.GET }],
+  });
 
   const ioAdapter = new RedisIoAdapter(app);
   await ioAdapter.connectToRedis(env.REDIS_URL);
@@ -28,7 +31,7 @@ async function bootstrap() {
   const doc = new DocumentBuilder()
     .setTitle("Chatter API")
     .setVersion("1.0")
-    .addCookieAuth("chatter_session")
+    .addCookieAuth("chatter_access")
     .build();
   SwaggerModule.setup("api/docs", app, SwaggerModule.createDocument(app, doc));
 

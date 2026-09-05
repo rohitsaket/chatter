@@ -1,13 +1,16 @@
 "use client";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
+import { Suspense } from "react";
 import { api, ApiError } from "@/lib/api";
 import { ChatterLogo } from "@/components/icons";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
-  const [email, setEmail] = React.useState("john.doe@acmecorp.com");
+  const justReset = useSearchParams().get("reset") === "1";
+  const [identifier, setIdentifier] = React.useState("");
+  const [showPassword, setShowPassword] = React.useState(false);
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -17,7 +20,7 @@ export default function LoginPage() {
     setBusy(true);
     setError(null);
     try {
-      await api("/auth/login", { method: "POST", json: { email, password } });
+      await api("/auth/login", { method: "POST", json: { identifier: identifier.trim(), password } });
       router.replace("/app/chats");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Login failed");
@@ -35,7 +38,7 @@ export default function LoginPage() {
           border: "1px solid var(--border)",
           borderRadius: 18,
           padding: "32px 28px",
-          boxShadow: "0 10px 40px -12px rgba(23,21,37,.15)",
+          boxShadow: "var(--shadow-lg)",
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 22 }}>
@@ -56,26 +59,48 @@ export default function LoginPage() {
         </div>
         <div style={{ fontSize: 21, fontWeight: 800 }}>Welcome back</div>
         <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4, marginBottom: 20 }}>Sign in to your workspace.</div>
-        <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>Email</label>
+        {justReset && (
+          <div role="status" style={{ marginBottom: 16, background: "var(--muted)", border: "1px solid var(--good,#22b967)", color: "var(--text)", borderRadius: 10, padding: "9px 12px", fontSize: 12.5 }}>
+            Your password has been updated successfully. Please log in with your new password.
+          </div>
+        )}
+        <label htmlFor="identifier" style={{ display: "block", fontSize: 12.5, fontWeight: 700, marginBottom: 6 }}>
+          Email / Mobile / Aadhaar
+        </label>
         <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          id="identifier"
+          type="text"
+          value={identifier}
+          onChange={(e) => setIdentifier(e.target.value)}
           required
           style={inputStyle}
-          autoComplete="email"
+          autoComplete="username"
+          placeholder="you@example.com, +91 98765 43210 or Aadhaar"
         />
-        <label style={{ display: "block", fontSize: 12.5, fontWeight: 700, margin: "14px 0 6px" }}>Password</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          style={inputStyle}
-          autoComplete="current-password"
-          placeholder="Seed demo password: Chatter!Demo1"
-        />
-        {error && <div style={{ color: "var(--bad)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+        <label htmlFor="password" style={{ display: "block", fontSize: 12.5, fontWeight: 700, margin: "14px 0 6px" }}>Password</label>
+        <div style={{ position: "relative" }}>
+          <input
+            id="password"
+            type={showPassword ? "text" : "password"}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            style={{ ...inputStyle, paddingRight: 54 }}
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+            style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", fontSize: 11.5, fontWeight: 700, color: "var(--accent-text)" }}
+          >
+            {showPassword ? "Hide" : "Show"}
+          </button>
+        </div>
+        {error && <div role="alert" style={{ color: "var(--bad)", fontSize: 12.5, marginTop: 10 }}>{error}</div>}
+        <div style={{ textAlign: "right", marginTop: 10 }}>
+          <Link href="/auth/forgot-password" style={{ fontSize: 12.5, color: "var(--accent-text)", fontWeight: 700 }}>Forgot password?</Link>
+        </div>
         <button
           type="submit"
           disabled={busy}
@@ -113,3 +138,12 @@ const inputStyle: React.CSSProperties = {
   color: "var(--text)",
   outline: "none",
 };
+
+/** useSearchParams needs a Suspense boundary for static prerendering. */
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  );
+}

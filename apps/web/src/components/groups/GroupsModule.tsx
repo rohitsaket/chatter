@@ -115,7 +115,7 @@ export function GroupsModule() {
                 key={gc.name}
                 className={active ? undefined : "hoverable"}
                 onClick={() => setCat(gc.name)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--accent-text)" : "var(--text)" }}
               >
                 <span style={{ opacity: 0.75 }}>{gc.icon}</span>
                 <span style={{ flex: 1 }}>{gc.name}</span>
@@ -160,7 +160,7 @@ export function GroupsModule() {
           <div
             className="hoverable"
             onClick={() => setCreating(true)}
-            style={{ margin: "14px 14px 0", border: "1.5px dashed var(--p300)", borderRadius: 12, padding: 11, textAlign: "center", fontSize: 13.5, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}
+            style={{ margin: "14px 14px 0", border: "1.5px dashed var(--p300)", borderRadius: 12, padding: 11, textAlign: "center", fontSize: 13.5, fontWeight: 700, color: "var(--accent-text)", cursor: "pointer" }}
           >
             + Create Group
           </div>
@@ -168,7 +168,7 @@ export function GroupsModule() {
         <div style={{ flex: 1 }} />
         <div style={{ margin: 14, background: "var(--muted)", border: "1px solid var(--border)", borderRadius: 14, padding: 14 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 800, fontSize: 13.5 }}>
-            <span style={{ color: "var(--p600)" }}>💡</span> Quick Tip
+            <span style={{ color: "var(--accent-text)" }}>💡</span> Quick Tip
           </div>
           <div style={{ fontSize: 12.5, color: "var(--text2)", lineHeight: 1.55, marginTop: 7 }}>Create a group to collaborate with your team or across departments.</div>
         </div>
@@ -214,7 +214,7 @@ function GroupCard({ g, selected, onClick }: { g: GroupDto; selected: boolean; o
         <div style={{ flex: 1, minWidth: 0, paddingRight: 34 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <span style={{ fontWeight: 800, fontSize: 14 }}>{g.name}</span>
-            <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: "2.5px 8px", background: g.privacy === "PUBLIC" ? "#e6f8ee" : "var(--p100)", color: g.privacy === "PUBLIC" ? "var(--good)" : "var(--p600)" }}>
+            <span style={{ fontSize: 10.5, fontWeight: 700, borderRadius: 99, padding: "2.5px 8px", background: g.privacy === "PUBLIC" ? "#e6f8ee" : "var(--p100)", color: g.privacy === "PUBLIC" ? "var(--good)" : "var(--accent-text)" }}>
               {g.privacy === "PUBLIC" ? "🌐 Public" : "🔒 Private"}
             </span>
           </div>
@@ -286,7 +286,7 @@ function GroupOverview({ g }: { g: GroupDto }) {
               />
             </div>
           </div>
-          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "var(--p600)", background: "var(--p100)", borderRadius: 99, padding: "3px 10px", marginTop: 5 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, fontWeight: 700, color: "var(--accent-text)", background: "var(--p100)", borderRadius: 99, padding: "3px 10px", marginTop: 5 }}>
             {g.privacy === "PUBLIC" ? "🌐 Public Group" : "🔒 Private Group"}
           </span>
           <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 7 }}>{g.description}</div>
@@ -301,7 +301,7 @@ function GroupOverview({ g }: { g: GroupDto }) {
           <div
             key={t}
             onClick={() => setTab(t)}
-            style={{ color: tab === t ? "var(--p600)" : undefined, borderBottom: tab === t ? "2px solid var(--p600)" : "2px solid transparent", paddingBottom: 10, cursor: "pointer" }}
+            style={{ color: tab === t ? "var(--accent-text)" : undefined, borderBottom: tab === t ? "2px solid var(--p600)" : "2px solid transparent", paddingBottom: 10, cursor: "pointer" }}
           >
             {t}
           </div>
@@ -316,7 +316,7 @@ function GroupOverview({ g }: { g: GroupDto }) {
                 <div style={{ fontSize: 13, fontWeight: 700 }}>{m.name}</div>
                 <div style={{ fontSize: 11.5, color: "var(--text2)" }}>{presenceLabel(m.presence)}</div>
               </div>
-              <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--p600)", background: "var(--p100)", borderRadius: 99, padding: "3px 9px" }}>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: "var(--accent-text)", background: "var(--p100)", borderRadius: 99, padding: "3px 9px" }}>
                 {m.role === "ADMIN" || m.role === "OWNER" ? "Admin" : m.role === "MODERATOR" ? "Moderator" : "Member"}
               </span>
             </div>
@@ -370,7 +370,7 @@ function GroupOverview({ g }: { g: GroupDto }) {
               {g.tags.length > 0 && (
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginTop: 11 }}>
                   {g.tags.map((t) => (
-                    <span key={t} style={{ fontSize: 11, fontWeight: 700, color: "var(--p600)", background: "var(--p100)", borderRadius: 99, padding: "4px 11px" }}>{t}</span>
+                    <span key={t} style={{ fontSize: 11, fontWeight: 700, color: "var(--accent-text)", background: "var(--p100)", borderRadius: 99, padding: "4px 11px" }}>{t}</span>
                   ))}
                 </div>
               )}
@@ -399,7 +399,7 @@ function GroupOverview({ g }: { g: GroupDto }) {
               </div>
               {(g.announcements ?? []).map((ga) => (
                 <div key={ga.id} style={{ display: "flex", gap: 11, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
-                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--p600)", flexShrink: 0 }}>📣</div>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-text)", flexShrink: 0 }}>📣</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 700 }}>{ga.title}</div>
                     <div style={{ fontSize: 11, color: "var(--text3)", marginTop: 2 }}>
@@ -437,7 +437,7 @@ function EventsCard({ g }: { g: GroupDto }) {
         return (
           <div key={ge.id} style={{ display: "flex", gap: 12, padding: "11px 0", borderBottom: "1px solid var(--border)" }}>
             <div style={{ width: 46, height: 50, borderRadius: 11, background: "var(--p100)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--p600)", letterSpacing: ".05em" }}>{d.toLocaleString("en", { month: "short" }).toUpperCase()}</span>
+              <span style={{ fontSize: 9.5, fontWeight: 800, color: "var(--accent-text)", letterSpacing: ".05em" }}>{d.toLocaleString("en", { month: "short" }).toUpperCase()}</span>
               <span style={{ fontSize: 17, fontWeight: 800, color: "var(--p700)" }}>{d.getDate()}</span>
             </div>
             <div style={{ flex: 1 }}>
@@ -476,7 +476,7 @@ function GroupFilesTab({ g, imagesOnly }: { g: GroupDto; imagesOnly: boolean }) 
           className="hoverable"
           style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 6px", borderRadius: 10, color: "inherit", textDecoration: "none", borderBottom: "1px solid var(--border)" }}
         >
-          <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--p600)", fontSize: 8.5, fontWeight: 800, flexShrink: 0 }}>
+          <div style={{ width: 34, height: 34, borderRadius: 9, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-text)", fontSize: 8.5, fontWeight: 800, flexShrink: 0 }}>
             {f.type.slice(0, 3)}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>

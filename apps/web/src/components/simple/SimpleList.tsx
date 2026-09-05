@@ -23,7 +23,7 @@ export function SimpleListShell({
           <div style={{ fontSize: 12.5, color: "var(--text2)", marginTop: 3 }}>{subtitle}</div>
         </div>
         {action && (
-          <div onClick={onAction} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>
+          <div onClick={onAction} style={{ fontSize: 12.5, fontWeight: 700, color: "var(--accent-text)", cursor: "pointer" }}>
             {action}
           </div>
         )}

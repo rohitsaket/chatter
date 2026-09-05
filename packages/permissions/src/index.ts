@@ -11,7 +11,8 @@ export type Action =
   | "message.delete_any"
   | "file.delete_any"
   | "audit.read"
-  | "retention.manage";
+  | "retention.manage"
+  | "identity.view_sensitive"; // reveal a stored government identity number
 
 const POLICY: Record<Action, Role> = {
   "org.admin": "ADMIN",
@@ -23,6 +24,8 @@ const POLICY: Record<Action, Role> = {
   "file.delete_any": "ADMIN",
   "audit.read": "ADMIN",
   "retention.manage": "OWNER",
+  // Deliberately the most restrictive tier: not granted to ordinary admins.
+  "identity.view_sensitive": "OWNER",
 };
 
 /** True when `role` is at least the minimum role required for `action`. */

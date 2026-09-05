@@ -36,9 +36,13 @@ const GRID = "2fr 1.2fr 1fr 1fr 130px";
 
 export default function AdminPage() {
   const me = useMe();
-  const members = useAdminMembers();
-  const storage = useAdminStorage();
-  const audit = useAdminAudit();
+  // All three endpoints are admin-only. Hooks must run unconditionally, so the
+  // requests are gated with `enabled` instead — otherwise a member landing here
+  // fires six calls that can only 403.
+  const isAdmin = me.data?.orgRole === "OWNER" || me.data?.orgRole === "ADMIN";
+  const members = useAdminMembers(isAdmin);
+  const storage = useAdminStorage(isAdmin);
+  const audit = useAdminAudit(isAdmin);
   const qc = useQueryClient();
   const [section, setSection] = React.useState("Members");
   const [inviteCopied, setInviteCopied] = React.useState(false);
@@ -87,7 +91,7 @@ export default function AdminPage() {
                 key={an.name}
                 className={active ? undefined : "hoverable"}
                 onClick={() => setSection(an.name)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--accent-text)" : "var(--text)" }}
               >
                 <span style={{ opacity: 0.8 }}>{an.icon}</span>
                 {an.name}
@@ -171,7 +175,7 @@ export default function AdminPage() {
                 style={{
                   fontSize: 11,
                   fontWeight: 700,
-                  color: am.role === "OWNER" ? "var(--warn)" : am.role === "GUEST" ? "var(--text2)" : "var(--p600)",
+                  color: am.role === "OWNER" ? "var(--warn)" : am.role === "GUEST" ? "var(--text2)" : "var(--accent-text)",
                   background: am.role === "OWNER" ? "#fdf3e0" : am.role === "GUEST" ? "var(--muted)" : "var(--p100)",
                   borderRadius: 99,
                   padding: "3px 10px",
@@ -227,7 +231,7 @@ export default function AdminPage() {
           <div style={adminCard}>
             <div style={{ display: "flex", justifyContent: "space-between" }}>
               <span style={{ fontWeight: 800, fontSize: 13.5 }}>Recent Audit Events</span>
-              <span onClick={() => setSection("Audit Log")} style={{ fontSize: 12, fontWeight: 700, color: "var(--p600)", cursor: "pointer" }}>Open audit log</span>
+              <span onClick={() => setSection("Audit Log")} style={{ fontSize: 12, fontWeight: 700, color: "var(--accent-text)", cursor: "pointer" }}>Open audit log</span>
             </div>
             {(audit.data ?? []).slice(0, 5).map((ae) => (
               <div key={ae.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderBottom: "1px solid var(--border)", fontSize: 12.5 }}>

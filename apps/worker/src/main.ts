@@ -57,8 +57,13 @@ async function handleMaintenance(job: MaintenanceJob): Promise<void> {
     }
     case "process-outbox": {
       // Deliver outbox rows through the Socket.IO Redis adapter. The API also
-      // emits directly on its own low-latency path; clients dedupe by id, so
-      // at-least-once delivery here is safe.
+      // emits directly on its own low-latency path.
+      //
+      // NOTE: the two emitters do NOT share a payload shape — the API sends a
+      // full DTO, this sends the stored envelope (e.g. { messageId,
+      // conversationId }). Consumers must therefore treat an envelope as a
+      // "refetch" signal rather than as data; see isMessageDto() in the web
+      // client's socket.ts.
       const rows = await prisma.outboxEvent.findMany({
         where: { processedAt: null },
         orderBy: { createdAt: "asc" },

@@ -3,8 +3,21 @@ import * as React from "react";
 
 export interface MenuItem {
   label: string;
-  onClick: () => void;
+  /** Omitted for items that only open a submenu. */
+  onClick?: () => void;
   danger?: boolean;
+  icon?: React.ReactNode;
+  /** Draw a divider above this item. */
+  separator?: boolean;
+  /**
+   * Rendered greyed out and inert. `disabledReason` becomes the tooltip — used
+   * so a feature that is not built yet says so instead of silently doing
+   * nothing when clicked.
+   */
+  disabled?: boolean;
+  disabledReason?: string;
+  /** Nested flyout (e.g. mute durations). */
+  submenu?: MenuItem[];
 }
 
 /**
@@ -82,38 +95,75 @@ export function DotsMenu({
             background: "var(--surface)",
             border: "1px solid var(--border)",
             borderRadius: 12,
-            boxShadow: "0 10px 30px -8px rgba(23,21,37,.25)",
+            boxShadow: "var(--shadow-md)",
             padding: 5,
           }}
         >
           {items.map((it) => (
-            <button
-              key={it.label}
-              type="button"
-              role="menuitem"
-              onClick={(e) => {
-                e.stopPropagation();
-                setOpen(false);
-                it.onClick();
-              }}
-              className="hoverable"
-              style={{
-                display: "block",
-                width: "100%",
-                textAlign: "left",
-                background: "transparent",
-                border: "none",
-                borderRadius: 8,
-                padding: "8px 11px",
-                fontSize: 13,
-                fontWeight: 600,
-                color: it.danger ? "var(--bad)" : "var(--text)",
-                cursor: "pointer",
-                font: "inherit",
-              }}
-            >
-              {it.label}
-            </button>
+            <MenuRow key={it.label} item={it} close={() => setOpen(false)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** One menu row: optional icon, divider, disabled state and nested flyout. */
+function MenuRow({ item, close }: { item: MenuItem; close: () => void }) {
+  const [openSub, setOpenSub] = React.useState(false);
+  const hasSub = Boolean(item.submenu?.length);
+
+  const row = (
+    <button
+      type="button"
+      role="menuitem"
+      aria-haspopup={hasSub || undefined}
+      aria-expanded={hasSub ? openSub : undefined}
+      aria-disabled={item.disabled || undefined}
+      title={item.disabled ? item.disabledReason : undefined}
+      onClick={(e) => {
+        e.stopPropagation();
+        if (item.disabled) return;
+        if (hasSub) {
+          setOpenSub((o) => !o);
+          return;
+        }
+        close();
+        item.onClick?.();
+      }}
+      className={item.disabled ? undefined : "hoverable"}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        width: "100%",
+        textAlign: "left",
+        background: "transparent",
+        border: "none",
+        borderRadius: 8,
+        padding: "8px 11px",
+        fontSize: 13,
+        fontWeight: 600,
+        color: item.disabled ? "var(--text3)" : item.danger ? "var(--bad)" : "var(--text)",
+        cursor: item.disabled ? "not-allowed" : "pointer",
+        font: "inherit",
+        opacity: item.disabled ? 0.65 : 1,
+      }}
+    >
+      {item.icon && <span style={{ display: "flex", flexShrink: 0, width: 17 }}>{item.icon}</span>}
+      <span style={{ flex: 1 }}>{item.label}</span>
+      {hasSub && <span style={{ fontSize: 11, color: "var(--text3)" }}>{openSub ? "▾" : "▸"}</span>}
+    </button>
+  );
+
+  return (
+    <div style={{ position: "relative" }}>
+      {item.separator && <div style={{ height: 1, background: "var(--border)", margin: "5px 4px" }} />}
+      {row}
+      {hasSub && openSub && (
+        <div role="menu" style={{ padding: "2px 0 2px 26px" }}>
+          {item.submenu!.map((sub) => (
+            <MenuRow key={sub.label} item={sub} close={close} />
           ))}
         </div>
       )}

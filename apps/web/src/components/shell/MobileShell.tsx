@@ -2,8 +2,8 @@
 import { usePathname, useRouter } from "next/navigation";
 import * as React from "react";
 import type { MeDto } from "@chatter/contracts";
-import { useConversation } from "@/lib/queries";
-import { ChatterLogo, MoonIcon, SunIcon } from "../icons";
+import { useConversation, useLogout } from "@/lib/queries";
+import { ChatterLogo, LeaveIcon, MoonIcon, SunIcon } from "../icons";
 import { routeTitles, useActiveRoute, useNavBadges, useThemeToggle } from "./AppShell";
 import { useSettings } from "@/lib/queries";
 
@@ -18,6 +18,7 @@ export function MobileShell({ me, children }: { me: MeDto; children: React.React
   const conv = useConversation(inThread ? slug : null);
   const { unreadChats } = useNavBadges();
   const toggleTheme = useThemeToggle();
+  const logout = useLogout();
   const settings = useSettings();
   const dark = settings.data?.theme === "dark";
   void me;
@@ -84,6 +85,20 @@ export function MobileShell({ me, children }: { me: MeDto; children: React.React
         >
           {dark ? <SunIcon size={18} /> : <MoonIcon size={18} />}
         </button>
+        <button
+          type="button"
+          onClick={() => logout.mutate()}
+          disabled={logout.isPending}
+          aria-label="Log out"
+          title="Log out"
+          style={{
+            background: "none", border: "none", color: "var(--bad,#ef4457)", display: "flex",
+            cursor: logout.isPending ? "wait" : "pointer", opacity: logout.isPending ? 0.5 : 1,
+            minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "flex-end",
+          }}
+        >
+          <LeaveIcon size={19} />
+        </button>
       </header>
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>{children}</div>
       <nav
@@ -110,7 +125,7 @@ export function MobileShell({ me, children }: { me: MeDto; children: React.React
                 gap: 3,
                 padding: "7px 0",
                 cursor: "pointer",
-                color: active ? "var(--p600)" : "var(--text2)",
+                color: active ? "var(--accent-text)" : "var(--text2)",
                 position: "relative",
                 minHeight: 44,
                 background: "none",

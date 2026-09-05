@@ -5,12 +5,16 @@
 
 export const RT = {
   presence: "presence.updated",
+  /** Server tells a fresh connection how often to beat. */
+  presenceHeartbeat: "presence.heartbeat_interval",
   conversationUpdated: "conversation.updated",
   typingStarted: "conversation.typing_started",
   typingStopped: "conversation.typing_stopped",
   readUpdated: "conversation.read_updated",
   messageCreated: "message.created",
   messageUpdated: "message.updated",
+  /** Recipient's client acknowledged receipt -> sender's tick goes double. */
+  messageDelivered: "message.delivered",
   messageDeleted: "message.deleted",
   reactionUpdated: "message.reaction_updated",
   pollUpdated: "message.poll_updated",
@@ -21,6 +25,7 @@ export const RT = {
   notificationCreated: "notification.created",
   notificationCount: "notification.count_updated",
   fileUpdated: "file.updated",
+  e2eeDeviceChanged: "e2ee.device_changed",
   callIncoming: "call.incoming",
   callEnded: "call.ended",
 } as const;

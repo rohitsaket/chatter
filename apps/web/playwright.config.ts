@@ -13,10 +13,17 @@ export default defineConfig({
   },
   projects: [
     { name: "setup", testMatch: /auth\.setup\.ts/ },
+    // Spike runs unauthenticated and in isolation: no auth dependency, and it
+    // must not perturb the existing desktop/mobile suites.
+    {
+      name: "crypto-spike",
+      testMatch: /crypto-spike\.spec\.ts|storage-probe\.spec\.ts/,
+      use: { viewport: { width: 1280, height: 800 } },
+    },
     {
       name: "desktop",
       use: { viewport: { width: 1440, height: 900 }, storageState: "e2e/.auth/state.json" },
-      testIgnore: /mobile\.spec\.ts|auth\.setup\.ts/,
+      testIgnore: /mobile\.spec\.ts|auth\.setup\.ts|crypto-spike\.spec\.ts/,
       dependencies: ["setup"],
     },
     {

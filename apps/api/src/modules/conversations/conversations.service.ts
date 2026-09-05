@@ -41,17 +41,27 @@ export class ConversationsService {
     const others = conv.participants.filter((p) => p.userId !== auth.userId);
     const dmOther = conv.kind === "DM" ? others[0]?.user : undefined;
 
+    // Cleared history stays hidden from this user, so both the unread count and
+    // the preview must start after the later of "last read" and "cleared".
+    const unreadSince = [mine.lastReadAt, mine.clearedAt]
+      .filter((d): d is Date => Boolean(d))
+      .sort((a, b) => b.getTime() - a.getTime())[0];
+
     const unreadCount = await this.prisma.client.message.count({
       where: {
         conversationId: conv.id,
         deletedAt: null,
         senderId: { not: auth.userId },
-        ...(mine.lastReadAt ? { createdAt: { gt: mine.lastReadAt } } : {}),
+        ...(unreadSince ? { createdAt: { gt: unreadSince } } : {}),
       },
     });
 
     const last = await this.prisma.client.message.findFirst({
-      where: { conversationId: conv.id, deletedAt: null },
+      where: {
+        conversationId: conv.id,
+        deletedAt: null,
+        ...(mine.clearedAt ? { createdAt: { gt: mine.clearedAt } } : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: { sender: true, attachments: { include: { file: true } }, poll: true },
     });
@@ -65,7 +75,7 @@ export class ConversationsService {
         where: { id: conv.pinnedMessageId },
         include: { sender: true },
       });
-      if (pm && !pm.deletedAt) pinned = { id: pm.id, text: pm.text ?? "", authorName: pm.sender.name };
+      if (pm && !pm.deletedAt) pinned = { id: pm.id, text: pm.text ?? "Encrypted message", authorName: pm.sender.name };
     }
 
     const participants: ParticipantDto[] | undefined = opts?.withParticipants
@@ -104,12 +114,12 @@ export class ConversationsService {
       unreadCount,
       favorite: mine.favorite,
       archived: mine.archived,
-      muted: mine.muted,
+      // A timed mute that has lapsed is no longer a mute.
+      muted: mine.muted && (!mine.mutedUntil || mine.mutedUntil > new Date()),
       lastMessage: last
         ? {
             text:
-              last.text ??
-              (last.poll ? "📊 Poll" : last.attachments[0] ? `📎 ${last.attachments[0].file.name}` : ""),
+              last.text ?? (last.poll ? "📊 Poll" : "Encrypted message"),
             senderName: last.sender.name.split(" ")[0] ?? last.sender.name,
             senderIsSelf: last.senderId === auth.userId,
             at: last.createdAt.toISOString(),
@@ -132,7 +142,62 @@ export class ConversationsService {
       include: { group: true, participants: { include: { user: true } } },
       orderBy: { updatedAt: "desc" },
     });
-    return Promise.all(convs.map((c) => this.toDto(auth, c)));
+
+    // "Delete chat" hides a thread for this user only, and only until something
+    // new arrives — matching the behaviour people expect from messaging apps.
+    const visible = [];
+    for (const c of convs) {
+      const mine = c.participants.find((p) => p.userId === auth.userId);
+      if (mine?.hiddenAt) {
+        const since = await this.prisma.client.message.count({
+          where: { conversationId: c.id, deletedAt: null, createdAt: { gt: mine.hiddenAt } },
+        });
+        if (since === 0) continue;
+      }
+      visible.push(c);
+    }
+    return Promise.all(visible.map((c) => this.toDto(auth, c)));
+  }
+
+  /** Hide this user's history before now. The other participant keeps theirs. */
+  async clear(auth: AuthedUser, idOrSlug: string): Promise<{ ok: true }> {
+    const conv = await this.resolve(auth, idOrSlug);
+    await this.prisma.client.conversationParticipant.update({
+      where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
+      data: { clearedAt: new Date() },
+    });
+    return { ok: true };
+  }
+
+  /** Clear plus drop the thread from this user's list until a new message. */
+  async deleteForMe(auth: AuthedUser, idOrSlug: string): Promise<{ ok: true }> {
+    const conv = await this.resolve(auth, idOrSlug);
+    const now = new Date();
+    await this.prisma.client.conversationParticipant.update({
+      where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
+      data: { clearedAt: now, hiddenAt: now },
+    });
+    return { ok: true };
+  }
+
+  /**
+   * Mute indefinitely, for a fixed window, or not at all.
+   * `minutes` null = indefinite; 0 = unmute.
+   */
+  async setMute(auth: AuthedUser, idOrSlug: string, minutes: number | null): Promise<{ ok: true }> {
+    const conv = await this.resolve(auth, idOrSlug);
+    const data =
+      minutes === 0
+        ? { muted: false, mutedUntil: null }
+        : minutes === null
+          ? { muted: true, mutedUntil: null }
+          : { muted: true, mutedUntil: new Date(Date.now() + minutes * 60_000) };
+    await this.prisma.client.conversationParticipant.update({
+      where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
+      data,
+    });
+    this.rt.emitToUser(auth.userId, RT.conversationUpdated, { conversationId: conv.id });
+    return { ok: true };
   }
 
   async get(auth: AuthedUser, idOrSlug: string): Promise<ConversationDto> {
@@ -140,34 +205,83 @@ export class ConversationsService {
     return this.toDto(auth, conv, { withParticipants: true });
   }
 
-  async markRead(auth: AuthedUser, idOrSlug: string): Promise<{ ok: true }> {
+  /**
+   * Mark this user's unread messages as read.
+   *
+   * `upToMessageId` bounds the sweep at the last message the client actually
+   * rendered, so a partially-scrolled thread does not mark messages read that
+   * were never on screen. Omitted, it means "everything currently in the
+   * thread", which is what opening a short conversation does.
+   *
+   * The lower bound is the participant's existing `lastReadAt`: without it this
+   * re-examined every message from the other party on every open, which is a
+   * full-conversation scan per visit.
+   */
+  async markRead(auth: AuthedUser, idOrSlug: string, upToMessageId?: string): Promise<{ ok: true }> {
     const conv = await this.resolve(auth, idOrSlug);
     const now = new Date();
-    await this.prisma.client.$transaction(async (tx) => {
-      await tx.conversationParticipant.update({
-        where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
-        data: { lastReadAt: now },
+
+    const participant = await this.prisma.client.conversationParticipant.findUnique({
+      where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
+      select: { lastReadAt: true },
+    });
+
+    // Resolve the ceiling to a timestamp, and verify it belongs to THIS
+    // conversation so a client cannot widen the sweep with a foreign id.
+    let ceiling: Date | undefined;
+    if (upToMessageId) {
+      const boundary = await this.prisma.client.message.findFirst({
+        where: { id: upToMessageId, conversationId: conv.id },
+        select: { createdAt: true },
       });
-      // Read receipts for the sender's double-check ticks.
+      if (!boundary) throw new NotFoundException("Message not found in this conversation");
+      ceiling = boundary.createdAt;
+    }
+
+    await this.prisma.client.$transaction(async (tx) => {
       const unread = await tx.message.findMany({
-        where: { conversationId: conv.id, senderId: { not: auth.userId }, deletedAt: null },
+        where: {
+          conversationId: conv.id,
+          senderId: { not: auth.userId },
+          deletedAt: null,
+          createdAt: {
+            ...(participant?.lastReadAt ? { gt: participant.lastReadAt } : {}),
+            ...(ceiling ? { lte: ceiling } : {}),
+          },
+        },
         select: { id: true },
       });
+
       if (unread.length) {
-        await tx.messageReceipt.createMany({
-          data: unread.map((m) => ({ messageId: m.id, userId: auth.userId })),
-          skipDuplicates: true,
-        });
+        const ids = unread.map((m) => m.id);
+        // Upsert rather than createMany: a row may already exist carrying only
+        // deliveredAt, and that receipt must gain readAt instead of being
+        // skipped as a duplicate.
+        for (const id of ids) {
+          await tx.messageReceipt.upsert({
+            where: { messageId_userId: { messageId: id, userId: auth.userId } },
+            create: { messageId: id, userId: auth.userId, deliveredAt: now, readAt: now },
+            update: { readAt: now, deliveredAt: { set: now } },
+          });
+        }
+        // READ is terminal, so this only ever advances state.
         await tx.message.updateMany({
-          where: { id: { in: unread.map((m) => m.id) }, state: { not: "READ" } },
+          where: { id: { in: ids }, state: { not: "READ" } },
           data: { state: "READ" },
         });
       }
+
+      // Advance the watermark only as far as was actually read.
+      await tx.conversationParticipant.update({
+        where: { conversationId_userId: { conversationId: conv.id, userId: auth.userId } },
+        data: { lastReadAt: ceiling ?? now },
+      });
     });
+
     this.rt.emitToConversation(conv.id, RT.readUpdated, {
       conversationId: conv.id,
       userId: auth.userId,
-      lastReadAt: now.toISOString(),
+      lastReadAt: (ceiling ?? now).toISOString(),
     });
     return { ok: true };
   }

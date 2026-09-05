@@ -53,7 +53,7 @@ export function ChatList({ conversations, selected }: { conversations: Conversat
               display: "flex",
               alignItems: "center",
               gap: 6,
-              color: chatTab === tab ? "var(--p600)" : "var(--text2)",
+              color: chatTab === tab ? "var(--accent-text)" : "var(--text2)",
               borderBottom: `2px solid ${chatTab === tab ? "var(--p600)" : "transparent"}`,
               background: "none",
               border: "none",
@@ -88,7 +88,7 @@ export function ChatList({ conversations, selected }: { conversations: Conversat
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
                   <span style={{ flex: 1, fontWeight: 700, fontSize: 13.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-                  <span style={{ fontSize: 11, color: c.unreadCount ? "var(--p600)" : "var(--text3)", fontWeight: 600, flexShrink: 0 }}>
+                  <span style={{ fontSize: 11, color: c.unreadCount ? "var(--accent-text)" : "var(--text3)", fontWeight: 600, flexShrink: 0 }}>
                     {c.lastMessage ? listTime(c.lastMessage.at) : listTime(c.updatedAt)}
                   </span>
                 </div>
@@ -97,7 +97,7 @@ export function ChatList({ conversations, selected }: { conversations: Conversat
                     style={{
                       flex: 1,
                       fontSize: 12.5,
-                      color: typing ? "var(--p600)" : "var(--text2)",
+                      color: typing ? "var(--accent-text)" : "var(--text2)",
                       fontStyle: typing ? "italic" : "normal",
                       whiteSpace: "nowrap",
                       overflow: "hidden",

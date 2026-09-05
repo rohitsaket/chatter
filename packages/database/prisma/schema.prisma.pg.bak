@@ -1,0 +1,606 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy
+// ---------------------------------------------------------------------------
+
+enum Presence {
+  ONLINE
+  AWAY
+  BUSY
+  OFFLINE
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MODERATOR
+  MEMBER
+  GUEST
+}
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  updatedAt DateTime @updatedAt @db.Timestamptz()
+
+  memberships   Membership[]
+  workspaces    Workspace[]
+  conversations Conversation[]
+  groups        Group[]
+  files         File[]
+  auditLogs     AuditLog[]
+  storageQuotaBytes BigInt @default(10737418240) // 10 GB
+
+  @@map("organizations")
+}
+
+model Workspace {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  name           String
+  icon           String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  files          File[]
+
+  @@unique([organizationId, name])
+  @@map("workspaces")
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  passwordHash String
+  name         String
+  title        String?
+  department   String?
+  phone        String?
+  location     String?
+  timezone     String    @default("UTC")
+  about        String?
+  avatarColor  String? // css gradient token used by the UI for initials avatars
+  presence     Presence  @default(OFFLINE)
+  customStatus String?
+  lastActiveAt DateTime? @db.Timestamptz()
+  mfaEnabled   Boolean   @default(false)
+  mfaSecret    String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz()
+  updatedAt    DateTime  @updatedAt @db.Timestamptz()
+
+  memberships     Membership[]
+  sessions        Session[]
+  devices         Device[]
+  settings        UserSettings?
+  participants    ConversationParticipant[]
+  messages        Message[]
+  reactions       MessageReaction[]
+  pollVotes       PollVote[]
+  groupMembers    GroupMember[]
+  statuses        Status[]
+  statusViews     StatusView[]
+  statusReactions StatusReaction[]
+  ownedFiles      File[]
+  fileComments    FileComment[]
+  fileStars       FileStar[]
+  callParticipants CallParticipant[]
+  notifications   Notification[]           @relation("notifTarget")
+  actedNotifications Notification[]        @relation("notifActor")
+  contacts        Contact[]                @relation("contactOwner")
+  contactOf       Contact[]                @relation("contactTarget")
+  auditLogs       AuditLog[]
+  messageReceipts MessageReceipt[]
+
+  @@map("users")
+}
+
+model Membership {
+  id             String       @id @default(uuid()) @db.Uuid
+  userId         String       @db.Uuid
+  organizationId String       @db.Uuid
+  role           OrgRole      @default(MEMBER)
+  suspended      Boolean      @default(false)
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+  @@index([organizationId, role])
+  @@map("memberships")
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  tokenHash String   @unique
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  expiresAt DateTime @db.Timestamptz()
+  revokedAt DateTime? @db.Timestamptz()
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@map("sessions")
+}
+
+model Device {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  name       String
+  platform   String
+  lastActive DateTime @default(now()) @db.Timestamptz()
+  current    Boolean  @default(false)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("devices")
+}
+
+model UserSettings {
+  userId       String  @id @db.Uuid
+  theme        String  @default("light")
+  accent       String  @default("purple")
+  msgLayout    String  @default("Comfortable")
+  fontSize     Int     @default(14)
+  wallpaper    String  @default("Classic")
+  openTo       String  @default("Chats")
+  startupLaunch Boolean @default(true)
+  startTray    Boolean @default(false)
+  msgPreviews  Boolean @default(true)
+  data         Json    @default("{}")
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Contact {
+  id        String   @id @default(uuid()) @db.Uuid
+  ownerId   String   @db.Uuid
+  targetId  String   @db.Uuid
+  favorite  Boolean  @default(false)
+  blocked   Boolean  @default(false)
+  notes     String?
+  tags      String[] @default([])
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  owner     User     @relation("contactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  target    User     @relation("contactTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([ownerId, targetId])
+  @@map("contacts")
+}
+
+// ---------------------------------------------------------------------------
+// Conversations & messages
+// ---------------------------------------------------------------------------
+
+enum ConversationKind {
+  DM
+  GROUP
+}
+
+model Conversation {
+  id             String           @id @default(uuid()) @db.Uuid
+  organizationId String           @db.Uuid
+  kind           ConversationKind
+  slug           String? // stable deep-link slug used by the prototype (alice, design, ...)
+  pinnedMessageId String?         @db.Uuid
+  createdAt      DateTime         @default(now()) @db.Timestamptz()
+  updatedAt      DateTime         @updatedAt @db.Timestamptz()
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  group          Group?
+  participants   ConversationParticipant[]
+  messages       Message[]
+
+  @@unique([organizationId, slug])
+  @@index([organizationId, updatedAt])
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  userId         String       @db.Uuid
+  role           OrgRole      @default(MEMBER)
+  lastReadAt     DateTime?    @db.Timestamptz()
+  muted          Boolean      @default(false)
+  archived       Boolean      @default(false)
+  favorite       Boolean      @default(false)
+  joinedAt       DateTime     @default(now()) @db.Timestamptz()
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, userId])
+  @@index([userId, archived])
+  @@map("conversation_participants")
+}
+
+enum MessageState {
+  SENT
+  DELIVERED
+  READ
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  senderId       String       @db.Uuid
+  text           String?
+  replyToId      String?      @db.Uuid
+  idempotencyKey String?
+  state          MessageState @default(SENT)
+  editedAt       DateTime?    @db.Timestamptz()
+  deletedAt      DateTime?    @db.Timestamptz()
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo        Message?     @relation("replies", fields: [replyToId], references: [id], onDelete: SetNull)
+  replies        Message[]    @relation("replies")
+  attachments    MessageAttachment[]
+  reactions      MessageReaction[]
+  poll           Poll?
+  receipts       MessageReceipt[]
+
+  @@unique([conversationId, senderId, idempotencyKey])
+  @@index([conversationId, createdAt])
+  @@map("messages")
+}
+
+model MessageReceipt {
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  readAt    DateTime @default(now()) @db.Timestamptz()
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([messageId, userId])
+  @@map("message_receipts")
+}
+
+model MessageAttachment {
+  id        String  @id @default(uuid()) @db.Uuid
+  messageId String  @db.Uuid
+  fileId    String  @db.Uuid
+  message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  file      File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, fileId])
+  @@map("message_attachments")
+}
+
+model MessageReaction {
+  id        String   @id @default(uuid()) @db.Uuid
+  messageId String   @db.Uuid
+  userId    String   @db.Uuid
+  emoji     String
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId, emoji])
+  @@map("message_reactions")
+}
+
+model Poll {
+  id        String       @id @default(uuid()) @db.Uuid
+  messageId String       @unique @db.Uuid
+  question  String
+  closesAt  DateTime?    @db.Timestamptz()
+  message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  options   PollOption[]
+
+  @@map("polls")
+}
+
+model PollOption {
+  id     String     @id @default(uuid()) @db.Uuid
+  pollId String     @db.Uuid
+  label  String
+  order  Int
+  poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  votes  PollVote[]
+
+  @@unique([pollId, order])
+  @@map("poll_options")
+}
+
+model PollVote {
+  id       String     @id @default(uuid()) @db.Uuid
+  optionId String     @db.Uuid
+  pollId   String     @db.Uuid
+  userId   String     @db.Uuid
+  option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([pollId, userId]) // one vote per poll per user; changing vote = update
+  @@map("poll_votes")
+}
+
+// ---------------------------------------------------------------------------
+// Groups
+// ---------------------------------------------------------------------------
+
+enum GroupPrivacy {
+  PUBLIC
+  PRIVATE
+}
+
+model Group {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  conversationId String       @unique @db.Uuid
+  name           String
+  code           String? // e.g. DES-2024
+  icon           String?
+  avatarColor    String?
+  privacy        GroupPrivacy @default(PRIVATE)
+  description    String?
+  tags           String[]     @default([])
+  archived       Boolean      @default(false)
+  createdById    String?      @db.Uuid
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  members        GroupMember[]
+  events         GroupEvent[]
+  announcements  GroupAnnouncement[]
+
+  @@unique([organizationId, name])
+  @@map("groups")
+}
+
+model GroupMember {
+  id      String  @id @default(uuid()) @db.Uuid
+  groupId String  @db.Uuid
+  userId  String  @db.Uuid
+  role    OrgRole @default(MEMBER)
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+model GroupEvent {
+  id       String   @id @default(uuid()) @db.Uuid
+  groupId  String   @db.Uuid
+  name     String
+  startsAt DateTime @db.Timestamptz()
+  location String?
+  group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, startsAt])
+  @@map("group_events")
+}
+
+model GroupAnnouncement {
+  id        String   @id @default(uuid()) @db.Uuid
+  groupId   String   @db.Uuid
+  authorId  String?  @db.Uuid
+  title     String
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId, createdAt])
+  @@map("group_announcements")
+}
+
+// ---------------------------------------------------------------------------
+// Statuses
+// ---------------------------------------------------------------------------
+
+model Status {
+  id         String    @id @default(uuid()) @db.Uuid
+  ownerId    String    @db.Uuid
+  caption    String?
+  mediaFileId String?  @db.Uuid
+  mediaStyle String? // css gradient placeholder when no real media
+  audience   String    @default("org") // org | group:<id> | contacts
+  createdAt  DateTime  @default(now()) @db.Timestamptz()
+  expiresAt  DateTime  @db.Timestamptz()
+  deletedAt  DateTime? @db.Timestamptz()
+  owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  views      StatusView[]
+  reactions  StatusReaction[]
+
+  @@index([ownerId, expiresAt])
+  @@map("statuses")
+}
+
+model StatusView {
+  statusId String   @db.Uuid
+  userId   String   @db.Uuid
+  viewedAt DateTime @default(now()) @db.Timestamptz()
+  status   Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([statusId, userId]) // idempotent view recording
+  @@map("status_views")
+}
+
+model StatusReaction {
+  id       String   @id @default(uuid()) @db.Uuid
+  statusId String   @db.Uuid
+  userId   String   @db.Uuid
+  emoji    String
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  status   Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([statusId, emoji])
+  @@map("status_reactions")
+}
+
+// ---------------------------------------------------------------------------
+// Files
+// ---------------------------------------------------------------------------
+
+enum FileStatus {
+  UPLOADING
+  PROCESSING
+  READY
+  FAILED
+  TRASHED
+}
+
+model File {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  workspaceId    String?      @db.Uuid
+  ownerId        String       @db.Uuid
+  name           String
+  type           String // PDF, SKETCH, PNG ...
+  mime           String
+  sizeBytes      BigInt
+  storageKey     String       @unique
+  checksum       String?
+  status         FileStatus   @default(UPLOADING)
+  sharedIn       String?
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  updatedAt      DateTime     @updatedAt @db.Timestamptz()
+  trashedAt      DateTime?    @db.Timestamptz()
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  workspace      Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  versions       FileVersion[]
+  comments       FileComment[]
+  stars          FileStar[]
+  attachments    MessageAttachment[]
+
+  @@index([organizationId, status, updatedAt])
+  @@map("files")
+}
+
+model FileVersion {
+  id         String   @id @default(uuid()) @db.Uuid
+  fileId     String   @db.Uuid
+  version    String
+  storageKey String
+  sizeBytes  BigInt
+  authorId   String?  @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamptz()
+  file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@unique([fileId, version])
+  @@map("file_versions")
+}
+
+model FileComment {
+  id        String   @id @default(uuid()) @db.Uuid
+  fileId    String   @db.Uuid
+  authorId  String   @db.Uuid
+  body      String
+  createdAt DateTime @default(now()) @db.Timestamptz()
+  file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([fileId, createdAt])
+  @@map("file_comments")
+}
+
+model FileStar {
+  fileId String @db.Uuid
+  userId String @db.Uuid
+  file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([fileId, userId])
+  @@map("file_stars")
+}
+
+// ---------------------------------------------------------------------------
+// Calls
+// ---------------------------------------------------------------------------
+
+enum CallState {
+  RINGING
+  ACTIVE
+  ENDED
+}
+
+model Call {
+  id             String    @id @default(uuid()) @db.Uuid
+  organizationId String    @db.Uuid
+  conversationId String?   @db.Uuid
+  kind           ConversationKind
+  roomName       String    @unique
+  state          CallState @default(RINGING)
+  startedById    String    @db.Uuid
+  startedAt      DateTime  @default(now()) @db.Timestamptz()
+  endedAt        DateTime? @db.Timestamptz()
+  participants   CallParticipant[]
+
+  @@index([organizationId, startedAt])
+  @@map("calls")
+}
+
+model CallParticipant {
+  id       String    @id @default(uuid()) @db.Uuid
+  callId   String    @db.Uuid
+  userId   String    @db.Uuid
+  joinedAt DateTime  @default(now()) @db.Timestamptz()
+  leftAt   DateTime? @db.Timestamptz()
+  call     Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([callId, userId])
+  @@map("call_participants")
+}
+
+// ---------------------------------------------------------------------------
+// Notifications & audit
+// ---------------------------------------------------------------------------
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  actorId   String?   @db.Uuid
+  type      String // mention | announcement | file_shared | missed_call | status_reaction ...
+  title     String
+  body      String
+  deepLink  String?
+  readAt    DateTime? @db.Timestamptz()
+  archivedAt DateTime? @db.Timestamptz()
+  createdAt DateTime  @default(now()) @db.Timestamptz()
+  user      User      @relation("notifTarget", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User?     @relation("notifActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([userId, readAt, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id             String       @id @default(uuid()) @db.Uuid
+  organizationId String       @db.Uuid
+  actorId        String?      @db.Uuid
+  action         String
+  target         String?
+  metadata       Json         @default("{}")
+  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor          User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@map("audit_logs")
+}
+
+// Transactional outbox for realtime/notification events.
+model OutboxEvent {
+  id          String    @id @default(uuid()) @db.Uuid
+  topic       String
+  payload     Json
+  createdAt   DateTime  @default(now()) @db.Timestamptz()
+  processedAt DateTime? @db.Timestamptz()
+
+  @@index([processedAt, createdAt])
+  @@map("outbox_events")
+}

@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/commo
 import type { AdminMemberDto, AuditEventDto, StorageSummaryDto } from "@chatter/contracts";
 import { can, outranks, type Role } from "@chatter/permissions";
 import { PrismaService } from "../../common/prisma.service";
+import { decryptIdentity } from "@chatter/database";
 import type { AuthedUser } from "../../common/session.service";
 import { initials } from "../users/users.service";
 
@@ -33,6 +34,33 @@ export class AdminService {
     }));
   }
 
+  /**
+   * Reveal a member's stored government identity number.
+   *
+   * Gated on the most restrictive permission tier, and every call writes an
+   * audit row. The audit metadata records WHO looked at WHOSE identity and
+   * when — never the number itself.
+   */
+  async revealIdentity(auth: AuthedUser, userId: string): Promise<{ aadhaar: string; last4: string }> {
+    if (!can(auth.orgRole, "identity.view_sensitive")) {
+      throw new ForbiddenException("You are not permitted to view sensitive identity data");
+    }
+    await this.membershipOf(auth, userId); // enforces same-organisation scope
+    const identity = await this.prisma.client.userIdentity.findUnique({ where: { userId } });
+    if (!identity) throw new NotFoundException("No identity on file for this member");
+
+    await this.prisma.client.auditLog.create({
+      data: {
+        organizationId: auth.organizationId,
+        actorId: auth.userId,
+        action: "identity.viewed",
+        target: userId,
+        metadata: { field: "aadhaar" }, // never the value
+      },
+    });
+    return { aadhaar: decryptIdentity(identity.aadhaarEnc), last4: identity.aadhaarLast4 };
+  }
+
   async changeRole(auth: AuthedUser, userId: string, role: Role): Promise<{ ok: true }> {
     this.assertAdmin(auth);
     const target = await this.membershipOf(auth, userId);
@@ -57,13 +85,21 @@ export class AdminService {
     this.assertAdmin(auth);
     const target = await this.membershipOf(auth, userId);
     if (!outranks(auth.orgRole, target.role)) throw new ForbiddenException("You cannot manage a member at or above your rank");
+    const activeSessions = suspended
+      ? await this.prisma.client.session.findMany({ where: { userId, revokedAt: null }, select: { id: true } })
+      : [];
+    const now = new Date();
     await this.prisma.client.$transaction([
       this.prisma.client.membership.update({ where: { id: target.id }, data: { suspended } }),
       ...(suspended
         ? [
             this.prisma.client.session.updateMany({
               where: { userId, revokedAt: null },
-              data: { revokedAt: new Date() },
+              data: { revokedAt: now },
+            }),
+            this.prisma.client.refreshToken.updateMany({
+              where: { sessionId: { in: activeSessions.map((session) => session.id) }, revokedAt: null },
+              data: { revokedAt: now },
             }),
           ]
         : []),

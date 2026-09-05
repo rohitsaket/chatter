@@ -47,9 +47,9 @@ export class StatusesController {
   reply(
     @CurrentUser() user: AuthedUser,
     @Param("id", ParseUUIDPipe) id: string,
-    @Body(new ZodPipe(statusReplyBody)) body: { text: string },
+    @Body(new ZodPipe(statusReplyBody)) _body: Record<string, never>,
   ) {
-    return this.statuses.reply(user, id, body.text);
+    return this.statuses.reply(user, id);
   }
 
   @Delete(":id")

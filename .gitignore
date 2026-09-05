@@ -1,6 +1,7 @@
 node_modules/
 dist/
 .next/
+.next-verify/
 .turbo/
 coverage/
 *.log
@@ -10,6 +11,7 @@ coverage/
 /apps/web/playwright-report/
 /apps/web/test-results/
 /var/
+var/
 /apps/web/e2e/.auth/
 *.tsbuildinfo
 dump.rdb

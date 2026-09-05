@@ -1,6 +1,6 @@
 import { ForbiddenException, Injectable, NestMiddleware } from "@nestjs/common";
 import type { NextFunction, Request, Response } from "express";
-import { CSRF_COOKIE, SESSION_COOKIE } from "./session.service";
+import { ACCESS_COOKIE, CSRF_COOKIE, REFRESH_COOKIE } from "./session.service";
 
 const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -12,7 +12,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 @Injectable()
 export class CsrfMiddleware implements NestMiddleware {
   use(req: Request, res: Response, next: NextFunction): void {
-    if (SAFE_METHODS.has(req.method) || !req.cookies?.[SESSION_COOKIE]) return next();
+    if (SAFE_METHODS.has(req.method) || (!req.cookies?.[ACCESS_COOKIE] && !req.cookies?.[REFRESH_COOKIE])) return next();
     const cookie = req.cookies?.[CSRF_COOKIE];
     const header = req.headers["x-csrf-token"];
     if (!cookie || cookie !== header) {

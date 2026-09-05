@@ -13,3 +13,6 @@ export function createPrisma(): PrismaClient {
   }
   return globalThis.__chatterPrisma;
 }
+
+/** Identity-number encryption and fingerprinting (see identity.crypto.ts). */
+export * from "./identity.crypto";

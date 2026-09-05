@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { createJoinToken, NOT_CONFIGURED_REASON } from "@chatter/calls";
 import { livekitConfigured } from "@chatter/config";
 import type { CallTokenDto } from "@chatter/contracts";
@@ -23,6 +23,14 @@ export class CallsService {
    */
   async join(auth: AuthedUser, idOrSlug: string): Promise<CallTokenDto> {
     const conv = await this.conversations.resolve(auth, idOrSlug);
+    const otherUserIds = conv.participants.filter((participant) => participant.userId !== auth.userId).map((participant) => participant.userId);
+    const blocked = await this.prisma.client.contact.findFirst({
+      where: { blocked: true, OR: [
+        { ownerId: auth.userId, targetId: { in: otherUserIds } },
+        { targetId: auth.userId, ownerId: { in: otherUserIds } },
+      ] },
+    });
+    if (blocked) throw new ForbiddenException("Calling is unavailable for this conversation");
     if (!livekitConfigured()) {
       return { configured: false, reason: NOT_CONFIGURED_REASON };
     }

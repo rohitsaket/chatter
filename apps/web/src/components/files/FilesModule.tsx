@@ -157,7 +157,7 @@ export function FilesModule() {
                 key={fc.name}
                 className={active ? undefined : "hoverable"}
                 onClick={() => setCat(fc.name)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8.5px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8.5px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--accent-text)" : "var(--text)" }}
               >
                 <span style={{ opacity: 0.8 }}>{fc.icon}</span>
                 <span style={{ flex: 1 }}>{fc.name}</span>
@@ -176,7 +176,7 @@ export function FilesModule() {
                 key={w}
                 className={active ? undefined : "hoverable"}
                 onClick={() => setWorkspace(active ? null : w)}
-                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--p600)" : "var(--text)" }}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 600, fontSize: 13.5, background: active ? "var(--sel)" : "transparent", color: active ? "var(--accent-text)" : "var(--text)" }}
               >
                 <div style={{ width: 26, height: 26, borderRadius: 8, background: bgs[i % bgs.length], display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontSize: 10 }}>👥</div>
                 {w}
@@ -186,7 +186,7 @@ export function FilesModule() {
           <div
             className="hoverable"
             onClick={() => router.push("/app/groups")}
-            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 13.5, color: "var(--p600)" }}
+            style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 11px", borderRadius: 11, cursor: "pointer", fontWeight: 700, fontSize: 13.5, color: "var(--accent-text)" }}
           >
             + Create Workspace
           </div>
@@ -408,7 +408,7 @@ function FileDetail({ f, onStar, onTrash, onClose }: { f: FileDto; onStar: () =>
                 {v.authorName ? ` · ${v.authorName}` : ""}
               </span>
               {i === 0 && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--p600)", background: "var(--p100)", borderRadius: 99, padding: "2px 8px" }}>Current</span>
+                <span style={{ fontSize: 10, fontWeight: 700, color: "var(--accent-text)", background: "var(--p100)", borderRadius: 99, padding: "2px 8px" }}>Current</span>
               )}
             </div>
           ))}

@@ -2,16 +2,22 @@ import { PrismaClient } from "@chatter/database";
 
 /**
  * Truncate all application tables between integration tests.
- * Uses a single TRUNCATE ... CASCADE for speed and FK safety.
+ * FK checks are disabled for the sweep so table order does not matter.
  */
 export async function resetDatabase(prisma: PrismaClient): Promise<void> {
-  const tables = await prisma.$queryRaw<{ tablename: string }[]>`
-    SELECT tablename FROM pg_tables
-    WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations')
+  const tables = await prisma.$queryRaw<{ TABLE_NAME: string }[]>`
+    SELECT TABLE_NAME FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME NOT IN ('_prisma_migrations')
   `;
   if (tables.length === 0) return;
-  const list = tables.map((t) => `"public"."${t.tablename}"`).join(", ");
-  await prisma.$executeRawUnsafe(`TRUNCATE TABLE ${list} RESTART IDENTITY CASCADE`);
+  await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 0");
+  try {
+    for (const t of tables) {
+      await prisma.$executeRawUnsafe(`TRUNCATE TABLE \`${t.TABLE_NAME}\``);
+    }
+  } finally {
+    await prisma.$executeRawUnsafe("SET FOREIGN_KEY_CHECKS = 1");
+  }
 }
 
 /** Minimal cookie jar for supertest-style session flows. */

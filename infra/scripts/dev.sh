@@ -3,7 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-docker compose -f infra/docker/docker-compose.yml up -d postgres redis minio
+docker compose -f infra/docker/docker-compose.yml up -d mysql redis minio
 cp -n .env.example .env || true
 pnpm install
 pnpm --filter @chatter/database db:generate

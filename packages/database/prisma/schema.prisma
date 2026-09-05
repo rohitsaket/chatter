@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -26,12 +26,19 @@ enum OrgRole {
   GUEST
 }
 
+enum AccountStatus {
+  ACTIVE
+  SUSPENDED
+  LOCKED
+  DELETED
+}
+
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
   name      String
   slug      String   @unique
-  createdAt DateTime @default(now()) @db.Timestamptz()
-  updatedAt DateTime @updatedAt @db.Timestamptz()
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   memberships   Membership[]
   workspaces    Workspace[]
@@ -45,11 +52,11 @@ model Organization {
 }
 
 model Workspace {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @db.Char(36)
   name           String
   icon           String?
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   files          File[]
 
@@ -58,29 +65,50 @@ model Workspace {
 }
 
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
+  id           String    @id @default(uuid()) @db.Char(36)
   email        String    @unique
   passwordHash String
   name         String
+  // Structured registration fields. Nullable: accounts created before these
+  // were collected remain valid and are completed via the profile flow.
+  firstName    String?
+  lastName     String?
+  country      String?   @db.Char(2) // ISO 3166-1 alpha-2
+  state        String?
+  pinCode      String?   // string, never int — postal codes may have leading zeros
   title        String?
   department   String?
-  phone        String?
+  phone        String?   // mobile, stored E.164
+  /// Whether `phone` has been proven to belong to this person. No SMS/OTP flow
+  /// exists yet, so a number supplied at registration is trusted and this
+  /// defaults true; the column exists so discovery can be gated the moment a
+  /// verification flow lands, without another migration.
+  phoneVerified Boolean  @default(true)
+  /// Consecutive failed sign-in attempts. Reset to zero on any success.
+  failedLoginAttempts Int      @default(0)
+  /// Set when the threshold is crossed; sign-in is refused until this passes.
+  /// Throttling alone does not stop a distributed guessing attack, which is why
+  /// the lock is per-account rather than per-IP.
+  lockedUntil         DateTime?
   location     String?
   timezone     String    @default("UTC")
-  about        String?
+  about        String? @db.Text
   avatarColor  String? // css gradient token used by the UI for initials avatars
   presence     Presence  @default(OFFLINE)
   customStatus String?
-  lastActiveAt DateTime? @db.Timestamptz()
+  lastActiveAt DateTime?
   mfaEnabled   Boolean   @default(false)
   mfaSecret    String?
-  createdAt    DateTime  @default(now()) @db.Timestamptz()
-  updatedAt    DateTime  @updatedAt @db.Timestamptz()
+  status       AccountStatus @default(ACTIVE)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 
   memberships     Membership[]
   sessions        Session[]
+  passwordResets  PasswordReset[]
   devices         Device[]
   settings        UserSettings?
+  identity        UserIdentity?
   participants    ConversationParticipant[]
   messages        Message[]
   reactions       MessageReaction[]
@@ -97,19 +125,44 @@ model User {
   actedNotifications Notification[]        @relation("notifActor")
   contacts        Contact[]                @relation("contactOwner")
   contactOf       Contact[]                @relation("contactTarget")
+  externalContacts ExternalContact[]       @relation("externalContactOwner")
+  toDeviceMessages ToDeviceMessage[]
   auditLogs       AuditLog[]
   messageReceipts MessageReceipt[]
 
+  /// Phone lookup is an indexed exact match on the normalized value.
+  @@index([phone])
   @@map("users")
 }
 
+/**
+ * Sensitive government identity, isolated from `users` so it is never loaded by
+ * an ordinary user query. The plaintext Aadhaar is never stored:
+ *   aadhaarEnc   AES-256-GCM ciphertext (iv.tag.ciphertext, base64)
+ *   aadhaarHash  HMAC-SHA256 fingerprint — duplicate detection without plaintext
+ *   aadhaarLast4 the only digits ever displayed
+ * Both keys are derived from the app secret via HKDF (see identity.crypto.ts).
+ */
+model UserIdentity {
+  id           String   @id @default(uuid()) @db.Char(36)
+  userId       String   @unique @db.Char(36)
+  aadhaarEnc   String   @db.Text
+  aadhaarHash  String   @unique @db.Char(64)
+  aadhaarLast4 String   @db.Char(4)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_identities")
+}
+
 model Membership {
-  id             String       @id @default(uuid()) @db.Uuid
-  userId         String       @db.Uuid
-  organizationId String       @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  userId         String       @db.Char(36)
+  organizationId String       @db.Char(36)
   role           OrgRole      @default(MEMBER)
   suspended      Boolean      @default(false)
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  createdAt      DateTime     @default(now())
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -119,34 +172,95 @@ model Membership {
 }
 
 model Session {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @db.Uuid
-  tokenHash String   @unique
-  ip        String?
-  userAgent String?
-  createdAt DateTime @default(now()) @db.Timestamptz()
-  expiresAt DateTime @db.Timestamptz()
-  revokedAt DateTime? @db.Timestamptz()
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id              String   @id @default(uuid()) @db.Char(36)
+  userId          String   @db.Char(36)
+  /// Migration-only field from the former opaque-session architecture.
+  tokenHash       String?  @unique
+  deviceId        String   @db.Char(36)
+  refreshFamilyId String   @unique @db.Char(36)
+  ip              String?
+  userAgent       String?  @db.Text
+  createdAt       DateTime @default(now())
+  lastSeenAt      DateTime @default(now())
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  reuseDetectedAt DateTime?
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens   RefreshToken[]
 
   @@index([userId, expiresAt])
+  @@index([userId, deviceId])
   @@map("sessions")
 }
 
+model RefreshToken {
+  id            String   @id @default(uuid()) @db.Char(36)
+  jti           String   @unique @db.Char(36)
+  sessionId     String   @db.Char(36)
+  familyId      String   @db.Char(36)
+  tokenHash     String   @unique @db.Char(64)
+  parentJti     String?  @db.Char(36)
+  replacedByJti String?  @db.Char(36)
+  issuedAt      DateTime
+  expiresAt     DateTime
+  usedAt        DateTime?
+  revokedAt     DateTime?
+  session       Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, expiresAt])
+  @@index([familyId, issuedAt])
+  @@map("refresh_tokens")
+}
+
+/**
+ * Password-reset challenge: OTP phase then reset-authorization phase.
+ *
+ * Neither the OTP nor the reset token is stored — only SHA-256 digests, so a
+ * database read cannot be replayed against the endpoints. `attempts` bounds
+ * brute force; `consumedAt` makes both the OTP and the token strictly one-use.
+ */
+model PasswordReset {
+  id                  String    @id @default(uuid()) @db.Char(36)
+  userId              String    @db.Char(36)
+  otpHash             String    @db.Char(64)
+  otpExpiresAt        DateTime
+  attempts            Int       @default(0)
+  resendCount         Int       @default(0)
+  lastSentAt          DateTime
+  verifiedAt          DateTime?
+  resetTokenHash      String?   @unique @db.Char(64)
+  resetTokenExpiresAt DateTime?
+  consumedAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("password_resets")
+}
+
 model Device {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @db.Uuid
+  id         String   @id @default(uuid()) @db.Char(36)
+  userId     String   @db.Char(36)
   name       String
   platform   String
-  lastActive DateTime @default(now()) @db.Timestamptz()
+  lastActive DateTime @default(now())
   current    Boolean  @default(false)
+  deviceKeys String?  @db.Text // Public device keys (JSON-encoded string; the service stringifies)
+  protocolVersion String? @db.VarChar(64)
+  keyFingerprint String? @db.Char(64)
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  lastKeyChangeAt DateTime?
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  oneTimeKeys OneTimeKey[]
+  toDeviceMessages ToDeviceMessage[]
 
   @@map("devices")
 }
 
 model UserSettings {
-  userId       String  @id @db.Uuid
+  userId       String  @id @db.Char(36)
   theme        String  @default("light")
   accent       String  @default("purple")
   msgLayout    String  @default("Comfortable")
@@ -156,6 +270,9 @@ model UserSettings {
   startupLaunch Boolean @default(true)
   startTray    Boolean @default(false)
   msgPreviews  Boolean @default(true)
+  /// Who may find this account by its phone number: EVERYONE | CONTACTS | NOBODY.
+  /// Enforced server-side in the lookup query, never by hiding results in the UI.
+  phoneDiscoverable String @default("EVERYONE") @db.VarChar(16)
   data         Json    @default("{}")
   user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -163,19 +280,48 @@ model UserSettings {
 }
 
 model Contact {
-  id        String   @id @default(uuid()) @db.Uuid
-  ownerId   String   @db.Uuid
-  targetId  String   @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
+  ownerId   String   @db.Char(36)
+  targetId  String   @db.Char(36)
   favorite  Boolean  @default(false)
   blocked   Boolean  @default(false)
-  notes     String?
-  tags      String[] @default([])
-  createdAt DateTime @default(now()) @db.Timestamptz()
+  notes     String? @db.Text
+  tags      Json?             
+  createdAt DateTime @default(now())
   owner     User     @relation("contactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   target    User     @relation("contactTarget", fields: [targetId], references: [id], onDelete: Cascade)
 
   @@unique([ownerId, targetId])
   @@map("contacts")
+}
+
+/// A contact who is NOT a member of the organization, so there is no User row
+/// to hang the relationship off. Kept separate from Contact rather than making
+/// Contact.targetId nullable: Contact exists purely to decorate a directory
+/// member (its unique [ownerId, targetId] index and both FKs depend on that),
+/// whereas this is a standalone record the owner authors and can delete.
+model ExternalContact {
+  id        String   @id @default(uuid()) @db.Char(36)
+  ownerId   String   @db.Char(36)
+  name      String   @db.VarChar(80)
+  email     String?  @db.VarChar(254)
+  phone     String?  @db.VarChar(24)
+  company   String?  @db.VarChar(80)
+  title     String?  @db.VarChar(80)
+  notes     String?  @db.Text
+  tags      Json?
+  favorite  Boolean  @default(false)
+  blocked   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     User     @relation("externalContactOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+
+  /// Stops the same person being added twice. Email is optional, and MySQL
+  /// permits repeated NULLs in a unique index, so contacts without an email
+  /// are unaffected.
+  @@unique([ownerId, email])
+  @@index([ownerId])
+  @@map("external_contacts")
 }
 
 // ---------------------------------------------------------------------------
@@ -188,13 +334,13 @@ enum ConversationKind {
 }
 
 model Conversation {
-  id             String           @id @default(uuid()) @db.Uuid
-  organizationId String           @db.Uuid
+  id             String           @id @default(uuid()) @db.Char(36)
+  organizationId String           @db.Char(36)
   kind           ConversationKind
   slug           String? // stable deep-link slug used by the prototype (alice, design, ...)
-  pinnedMessageId String?         @db.Uuid
-  createdAt      DateTime         @default(now()) @db.Timestamptz()
-  updatedAt      DateTime         @updatedAt @db.Timestamptz()
+  pinnedMessageId String?         @db.Char(36)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   group          Group?
   participants   ConversationParticipant[]
@@ -206,15 +352,23 @@ model Conversation {
 }
 
 model ConversationParticipant {
-  id             String       @id @default(uuid()) @db.Uuid
-  conversationId String       @db.Uuid
-  userId         String       @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  conversationId String       @db.Char(36)
+  userId         String       @db.Char(36)
   role           OrgRole      @default(MEMBER)
-  lastReadAt     DateTime?    @db.Timestamptz()
+  lastReadAt     DateTime?
   muted          Boolean      @default(false)
+  /** Timed mute ("8 hours", "1 week"). `muted` alone means muted indefinitely. */
+  mutedUntil     DateTime?
+  /** "Clear chat": messages at or before this instant are hidden from THIS
+      user only — the other participant's history is untouched. */
+  clearedAt      DateTime?
+  /** "Delete chat": drops the thread from this user's list until a new message
+      arrives, again without affecting the other participant. */
+  hiddenAt       DateTime?
   archived       Boolean      @default(false)
   favorite       Boolean      @default(false)
-  joinedAt       DateTime     @default(now()) @db.Timestamptz()
+  joinedAt       DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -230,16 +384,16 @@ enum MessageState {
 }
 
 model Message {
-  id             String       @id @default(uuid()) @db.Uuid
-  conversationId String       @db.Uuid
-  senderId       String       @db.Uuid
-  text           String?
-  replyToId      String?      @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  conversationId String       @db.Char(36)
+  senderId       String       @db.Char(36)
+  text           String? @db.Text
+  replyToId      String?      @db.Char(36)
   idempotencyKey String?
   state          MessageState @default(SENT)
-  editedAt       DateTime?    @db.Timestamptz()
-  deletedAt      DateTime?    @db.Timestamptz()
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  editedAt       DateTime?
+  deletedAt      DateTime?
+  createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   sender         User         @relation(fields: [senderId], references: [id], onDelete: Cascade)
   replyTo        Message?     @relation("replies", fields: [replyToId], references: [id], onDelete: SetNull)
@@ -248,27 +402,40 @@ model Message {
   reactions      MessageReaction[]
   poll           Poll?
   receipts       MessageReceipt[]
+  encryption     MessageEncryption?
 
   @@unique([conversationId, senderId, idempotencyKey])
   @@index([conversationId, createdAt])
   @@map("messages")
 }
 
+/// Per-recipient delivery and read state for one message.
+///
+/// Both timestamps are nullable and independent: a row may exist with only
+/// `deliveredAt` (recipient's client acknowledged receipt but has not opened
+/// the thread). Delivery and read are separate acknowledgements, so read is
+/// never inferred from delivery, nor delivery from presence.
+///
+/// The composite primary key is what makes both acknowledgements idempotent —
+/// a duplicate ACK collides rather than inserting a second row.
 model MessageReceipt {
-  messageId String   @db.Uuid
-  userId    String   @db.Uuid
-  readAt    DateTime @default(now()) @db.Timestamptz()
-  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messageId   String    @db.Char(36)
+  userId      String    @db.Char(36)
+  deliveredAt DateTime?
+  readAt      DateTime?
+  message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([messageId, userId])
+  /// Drives "which of my messages are still unacknowledged" without a scan.
+  @@index([userId, readAt])
   @@map("message_receipts")
 }
 
 model MessageAttachment {
-  id        String  @id @default(uuid()) @db.Uuid
-  messageId String  @db.Uuid
-  fileId    String  @db.Uuid
+  id        String  @id @default(uuid()) @db.Char(36)
+  messageId String  @db.Char(36)
+  fileId    String  @db.Char(36)
   message   Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
   file      File    @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
@@ -277,11 +444,11 @@ model MessageAttachment {
 }
 
 model MessageReaction {
-  id        String   @id @default(uuid()) @db.Uuid
-  messageId String   @db.Uuid
-  userId    String   @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
+  messageId String   @db.Char(36)
+  userId    String   @db.Char(36)
   emoji     String
-  createdAt DateTime @default(now()) @db.Timestamptz()
+  createdAt DateTime @default(now())
   message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -290,10 +457,10 @@ model MessageReaction {
 }
 
 model Poll {
-  id        String       @id @default(uuid()) @db.Uuid
-  messageId String       @unique @db.Uuid
-  question  String
-  closesAt  DateTime?    @db.Timestamptz()
+  id        String       @id @default(uuid()) @db.Char(36)
+  messageId String       @unique @db.Char(36)
+  question  String @db.Text
+  closesAt  DateTime?
   message   Message      @relation(fields: [messageId], references: [id], onDelete: Cascade)
   options   PollOption[]
 
@@ -301,8 +468,8 @@ model Poll {
 }
 
 model PollOption {
-  id     String     @id @default(uuid()) @db.Uuid
-  pollId String     @db.Uuid
+  id     String     @id @default(uuid()) @db.Char(36)
+  pollId String     @db.Char(36)
   label  String
   order  Int
   poll   Poll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
@@ -313,10 +480,10 @@ model PollOption {
 }
 
 model PollVote {
-  id       String     @id @default(uuid()) @db.Uuid
-  optionId String     @db.Uuid
-  pollId   String     @db.Uuid
-  userId   String     @db.Uuid
+  id       String     @id @default(uuid()) @db.Char(36)
+  optionId String     @db.Char(36)
+  pollId   String     @db.Char(36)
+  userId   String     @db.Char(36)
   option   PollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
   user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -334,19 +501,19 @@ enum GroupPrivacy {
 }
 
 model Group {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  conversationId String       @unique @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @db.Char(36)
+  conversationId String       @unique @db.Char(36)
   name           String
   code           String? // e.g. DES-2024
   icon           String?
   avatarColor    String?
   privacy        GroupPrivacy @default(PRIVATE)
-  description    String?
-  tags           String[]     @default([])
+  description    String? @db.Text
+  tags           Json?                 
   archived       Boolean      @default(false)
-  createdById    String?      @db.Uuid
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  createdById    String?      @db.Char(36)
+  createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   members        GroupMember[]
@@ -358,9 +525,9 @@ model Group {
 }
 
 model GroupMember {
-  id      String  @id @default(uuid()) @db.Uuid
-  groupId String  @db.Uuid
-  userId  String  @db.Uuid
+  id      String  @id @default(uuid()) @db.Char(36)
+  groupId String  @db.Char(36)
+  userId  String  @db.Char(36)
   role    OrgRole @default(MEMBER)
   group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -370,10 +537,10 @@ model GroupMember {
 }
 
 model GroupEvent {
-  id       String   @id @default(uuid()) @db.Uuid
-  groupId  String   @db.Uuid
+  id       String   @id @default(uuid()) @db.Char(36)
+  groupId  String   @db.Char(36)
   name     String
-  startsAt DateTime @db.Timestamptz()
+  startsAt DateTime
   location String?
   group    Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
@@ -382,12 +549,12 @@ model GroupEvent {
 }
 
 model GroupAnnouncement {
-  id        String   @id @default(uuid()) @db.Uuid
-  groupId   String   @db.Uuid
-  authorId  String?  @db.Uuid
+  id        String   @id @default(uuid()) @db.Char(36)
+  groupId   String   @db.Char(36)
+  authorId  String?  @db.Char(36)
   title     String
-  body      String
-  createdAt DateTime @default(now()) @db.Timestamptz()
+  body      String @db.Text
+  createdAt DateTime @default(now())
   group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   @@index([groupId, createdAt])
@@ -399,15 +566,15 @@ model GroupAnnouncement {
 // ---------------------------------------------------------------------------
 
 model Status {
-  id         String    @id @default(uuid()) @db.Uuid
-  ownerId    String    @db.Uuid
-  caption    String?
-  mediaFileId String?  @db.Uuid
+  id         String    @id @default(uuid()) @db.Char(36)
+  ownerId    String    @db.Char(36)
+  caption    String? @db.Text
+  mediaFileId String?  @db.Char(36)
   mediaStyle String? // css gradient placeholder when no real media
   audience   String    @default("org") // org | group:<id> | contacts
-  createdAt  DateTime  @default(now()) @db.Timestamptz()
-  expiresAt  DateTime  @db.Timestamptz()
-  deletedAt  DateTime? @db.Timestamptz()
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime
+  deletedAt  DateTime?
   owner      User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   views      StatusView[]
   reactions  StatusReaction[]
@@ -417,9 +584,9 @@ model Status {
 }
 
 model StatusView {
-  statusId String   @db.Uuid
-  userId   String   @db.Uuid
-  viewedAt DateTime @default(now()) @db.Timestamptz()
+  statusId String   @db.Char(36)
+  userId   String   @db.Char(36)
+  viewedAt DateTime @default(now())
   status   Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -428,11 +595,11 @@ model StatusView {
 }
 
 model StatusReaction {
-  id       String   @id @default(uuid()) @db.Uuid
-  statusId String   @db.Uuid
-  userId   String   @db.Uuid
+  id       String   @id @default(uuid()) @db.Char(36)
+  statusId String   @db.Char(36)
+  userId   String   @db.Char(36)
   emoji    String
-  createdAt DateTime @default(now()) @db.Timestamptz()
+  createdAt DateTime @default(now())
   status   Status   @relation(fields: [statusId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -453,10 +620,10 @@ enum FileStatus {
 }
 
 model File {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  workspaceId    String?      @db.Uuid
-  ownerId        String       @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @db.Char(36)
+  workspaceId    String?      @db.Char(36)
+  ownerId        String       @db.Char(36)
   name           String
   type           String // PDF, SKETCH, PNG ...
   mime           String
@@ -464,10 +631,11 @@ model File {
   storageKey     String       @unique
   checksum       String?
   status         FileStatus   @default(UPLOADING)
+  encrypted      Boolean      @default(false)
   sharedIn       String?
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
-  updatedAt      DateTime     @updatedAt @db.Timestamptz()
-  trashedAt      DateTime?    @db.Timestamptz()
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  trashedAt      DateTime?
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   workspace      Workspace?   @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
   owner          User         @relation(fields: [ownerId], references: [id], onDelete: Cascade)
@@ -481,13 +649,13 @@ model File {
 }
 
 model FileVersion {
-  id         String   @id @default(uuid()) @db.Uuid
-  fileId     String   @db.Uuid
+  id         String   @id @default(uuid()) @db.Char(36)
+  fileId     String   @db.Char(36)
   version    String
   storageKey String
   sizeBytes  BigInt
-  authorId   String?  @db.Uuid
-  createdAt  DateTime @default(now()) @db.Timestamptz()
+  authorId   String?  @db.Char(36)
+  createdAt  DateTime @default(now())
   file       File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
 
   @@unique([fileId, version])
@@ -495,11 +663,11 @@ model FileVersion {
 }
 
 model FileComment {
-  id        String   @id @default(uuid()) @db.Uuid
-  fileId    String   @db.Uuid
-  authorId  String   @db.Uuid
-  body      String
-  createdAt DateTime @default(now()) @db.Timestamptz()
+  id        String   @id @default(uuid()) @db.Char(36)
+  fileId    String   @db.Char(36)
+  authorId  String   @db.Char(36)
+  body      String @db.Text
+  createdAt DateTime @default(now())
   file      File     @relation(fields: [fileId], references: [id], onDelete: Cascade)
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
 
@@ -508,13 +676,68 @@ model FileComment {
 }
 
 model FileStar {
-  fileId String @db.Uuid
-  userId String @db.Uuid
+  fileId String @db.Char(36)
+  userId String @db.Char(36)
   file   File   @relation(fields: [fileId], references: [id], onDelete: Cascade)
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@id([fileId, userId])
   @@map("file_stars")
+}
+
+// ---------------------------------------------------------------------------
+// E2EE - End-to-End Encryption Tables
+// ---------------------------------------------------------------------------
+
+model OneTimeKey {
+  id         String    @id @default(uuid()) @db.Char(36)
+  deviceId   String    @db.Char(36)
+  keyId      String
+  keyData    String    @db.Text
+  consumed   Boolean   @default(false)
+  consumedAt DateTime?
+  fallback   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  device     Device    @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@unique([deviceId, keyId])
+  @@map("one_time_keys")
+}
+
+model ToDeviceMessage {
+  id                String    @id @default(uuid()) @db.Char(36)
+  recipientUserId   String    @db.Char(36)
+  recipientDeviceId String    @db.Char(36)
+  senderUserId      String    @db.Char(36)
+  senderDeviceId    String    @db.Char(36)
+  payload           String    @db.Text
+  eventType         String    @db.VarChar(128)
+  transactionId     String    @db.VarChar(128)
+  delivered         Boolean   @default(false)
+  deliveredAt       DateTime?
+  createdAt         DateTime  @default(now())
+  recipient         User      @relation(fields: [recipientUserId], references: [id], onDelete: Cascade)
+  recipientDevice   Device    @relation(fields: [recipientDeviceId], references: [id], onDelete: Cascade)
+
+  @@index([recipientUserId, recipientDeviceId, delivered], map: "to_device_pending_idx")
+  @@unique([senderDeviceId, recipientDeviceId, transactionId], map: "to_device_txn_key")
+  @@map("to_device_messages")
+}
+
+model MessageEncryption {
+  id              String    @id @default(uuid()) @db.Char(36)
+  messageId       String    @unique @db.Char(36)
+  encryptedPayload String   @db.Text
+  protocolVersion String    @db.VarChar(64)
+  algorithm       String    // "m.megolm.v1.aes-sha256", etc.
+  sessionId       String
+  senderDeviceId  String    @db.Char(36)
+  ciphertextHash  String    @db.Char(64)
+  createdAt       DateTime  @default(now())
+  message         Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@map("message_encryption")
+  @@unique([senderDeviceId, ciphertextHash])
 }
 
 // ---------------------------------------------------------------------------
@@ -528,15 +751,15 @@ enum CallState {
 }
 
 model Call {
-  id             String    @id @default(uuid()) @db.Uuid
-  organizationId String    @db.Uuid
-  conversationId String?   @db.Uuid
+  id             String    @id @default(uuid()) @db.Char(36)
+  organizationId String    @db.Char(36)
+  conversationId String?   @db.Char(36)
   kind           ConversationKind
   roomName       String    @unique
   state          CallState @default(RINGING)
-  startedById    String    @db.Uuid
-  startedAt      DateTime  @default(now()) @db.Timestamptz()
-  endedAt        DateTime? @db.Timestamptz()
+  startedById    String    @db.Char(36)
+  startedAt      DateTime  @default(now())
+  endedAt        DateTime?
   participants   CallParticipant[]
 
   @@index([organizationId, startedAt])
@@ -544,11 +767,11 @@ model Call {
 }
 
 model CallParticipant {
-  id       String    @id @default(uuid()) @db.Uuid
-  callId   String    @db.Uuid
-  userId   String    @db.Uuid
-  joinedAt DateTime  @default(now()) @db.Timestamptz()
-  leftAt   DateTime? @db.Timestamptz()
+  id       String    @id @default(uuid()) @db.Char(36)
+  callId   String    @db.Char(36)
+  userId   String    @db.Char(36)
+  joinedAt DateTime  @default(now())
+  leftAt   DateTime?
   call     Call      @relation(fields: [callId], references: [id], onDelete: Cascade)
   user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -561,16 +784,16 @@ model CallParticipant {
 // ---------------------------------------------------------------------------
 
 model Notification {
-  id        String    @id @default(uuid()) @db.Uuid
-  userId    String    @db.Uuid
-  actorId   String?   @db.Uuid
+  id        String    @id @default(uuid()) @db.Char(36)
+  userId    String    @db.Char(36)
+  actorId   String?   @db.Char(36)
   type      String // mention | announcement | file_shared | missed_call | status_reaction ...
   title     String
-  body      String
+  body      String @db.Text
   deepLink  String?
-  readAt    DateTime? @db.Timestamptz()
-  archivedAt DateTime? @db.Timestamptz()
-  createdAt DateTime  @default(now()) @db.Timestamptz()
+  readAt    DateTime?
+  archivedAt DateTime?
+  createdAt DateTime  @default(now())
   user      User      @relation("notifTarget", fields: [userId], references: [id], onDelete: Cascade)
   actor     User?     @relation("notifActor", fields: [actorId], references: [id], onDelete: SetNull)
 
@@ -579,13 +802,13 @@ model Notification {
 }
 
 model AuditLog {
-  id             String       @id @default(uuid()) @db.Uuid
-  organizationId String       @db.Uuid
-  actorId        String?      @db.Uuid
+  id             String       @id @default(uuid()) @db.Char(36)
+  organizationId String       @db.Char(36)
+  actorId        String?      @db.Char(36)
   action         String
   target         String?
   metadata       Json         @default("{}")
-  createdAt      DateTime     @default(now()) @db.Timestamptz()
+  createdAt      DateTime     @default(now())
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   actor          User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
 
@@ -595,11 +818,11 @@ model AuditLog {
 
 // Transactional outbox for realtime/notification events.
 model OutboxEvent {
-  id          String    @id @default(uuid()) @db.Uuid
+  id          String    @id @default(uuid()) @db.Char(36)
   topic       String
   payload     Json
-  createdAt   DateTime  @default(now()) @db.Timestamptz()
-  processedAt DateTime? @db.Timestamptz()
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
 
   @@index([processedAt, createdAt])
   @@map("outbox_events")

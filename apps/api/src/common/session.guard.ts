@@ -1,7 +1,7 @@
 import { CanActivate, ExecutionContext, Injectable, SetMetadata } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import type { Request } from "express";
-import { SESSION_COOKIE, SessionService } from "./session.service";
+import { SessionService } from "./session.service";
 
 export const IS_PUBLIC = "isPublic";
 export const Public = () => SetMetadata(IS_PUBLIC, true);
@@ -21,7 +21,7 @@ export class SessionGuard implements CanActivate {
     ]);
     if (isPublic) return true;
     const req = context.switchToHttp().getRequest<Request & { user?: unknown }>();
-    req.user = await this.sessions.resolve(req.cookies?.[SESSION_COOKIE]);
+    req.user = await this.sessions.resolveRequest(req);
     return true;
   }
 }

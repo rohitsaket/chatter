@@ -38,9 +38,10 @@ export class FilesController {
   /** Raw binary upload: PUT-style POST with x-file-name / content-type headers. */
   @Post("upload")
   async upload(@CurrentUser() user: AuthedUser, @Req() req: Request) {
-    const name = decodeURIComponent(String(req.headers["x-file-name"] ?? ""));
+    const encrypted = req.headers["x-chatter-encrypted"] === "1";
+    const name = encrypted ? "Encrypted attachment" : decodeURIComponent(String(req.headers["x-file-name"] ?? ""));
     if (!name) throw new BadRequestException("x-file-name header required");
-    const mime = req.headers["content-type"] ?? "application/octet-stream";
+    const mime = encrypted ? "application/octet-stream" : (req.headers["content-type"] ?? "application/octet-stream");
     const chunks: Buffer[] = [];
     let total = 0;
     for await (const chunk of req) {
@@ -49,7 +50,7 @@ export class FilesController {
       chunks.push(chunk as Buffer);
     }
     if (total === 0) throw new BadRequestException("Empty upload");
-    return this.files.upload(user, name, String(mime), Buffer.concat(chunks));
+    return this.files.upload(user, name, String(mime), Buffer.concat(chunks), encrypted);
   }
 
   @Get(":id/download")

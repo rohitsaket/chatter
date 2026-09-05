@@ -37,6 +37,16 @@ export class AdminController {
     return this.admin.setSuspended(user, id, body.suspended);
   }
 
+  /**
+   * POST (not GET) so the member id never lands in a URL that could be logged
+   * by a proxy or browser history, and because each call writes an audit row.
+   */
+  @HttpCode(200)
+  @Post("members/:id/identity/reveal")
+  revealIdentity(@CurrentUser() user: AuthedUser, @Param("id", ParseUUIDPipe) id: string) {
+    return this.admin.revealIdentity(user, id);
+  }
+
   @Get("storage")
   storage(@CurrentUser() user: AuthedUser) {
     return this.admin.storage(user);

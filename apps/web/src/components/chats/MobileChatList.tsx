@@ -21,7 +21,7 @@ export function MobileChatList({ conversations }: { conversations: ConversationD
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
               <span style={{ flex: 1, fontWeight: 700, fontSize: 14.5, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{c.name}</span>
-              <span style={{ fontSize: 11, color: c.unreadCount ? "var(--p600)" : "var(--text3)", fontWeight: 600 }}>
+              <span style={{ fontSize: 11, color: c.unreadCount ? "var(--accent-text)" : "var(--text3)", fontWeight: 600 }}>
                 {c.lastMessage ? listTime(c.lastMessage.at) : listTime(c.updatedAt)}
               </span>
             </div>

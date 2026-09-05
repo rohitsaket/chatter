@@ -169,6 +169,22 @@ export const EmojiIcon = (p: IconProps) => (
   </S>
 );
 
+/** Single tick: the server accepted and persisted the message. Nothing more. */
+export const SingleCheckIcon = () => (
+  <svg
+    width="14"
+    height="10"
+    viewBox="0 0 16 10"
+    fill="none"
+    stroke="var(--text3)"
+    strokeWidth="1.6"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M3 5.5L6 8.5 11.5 2" />
+  </svg>
+);
+
 export const DoubleCheckIcon = ({ read }: { read: boolean }) => (
   <svg
     width="14"
@@ -202,6 +218,21 @@ export const MoonIcon = (p: IconProps) => (
   </S>
 );
 
+/**
+ * Settings cog. Distinct from SunIcon on purpose: the sidebar footer previously
+ * drew a sun here (identical circle-and-rays geometry), so in dark mode the
+ * Settings link and the theme toggle rendered as the same icon.
+ */
+export const GearIcon = (p: IconProps) => (
+  <S size={p.size ?? 19} {...p}>
+    <circle cx="10" cy="10" r="2.4" />
+    <path
+      d="M16.2 12.5a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 11-3.9 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1h-.2a2 2 0 110-3.9h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1A2 2 0 116 2.1l.1.1a1.6 1.6 0 001.8.3h.1a1.6 1.6 0 001-1.5v-.2a2 2 0 013.9 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8v.1a1.6 1.6 0 001.5 1h.2a2 2 0 010 3.9h-.1a1.6 1.6 0 00-1.5 1z"
+      transform="scale(.86) translate(1.6 1.6)"
+    />
+  </S>
+);
+
 export const SunIcon = (p: IconProps) => (
   <S size={p.size ?? 16} strokeLinecap="round" {...p}>
     <circle cx="10" cy="10" r="2.4" />
@@ -210,7 +241,7 @@ export const SunIcon = (p: IconProps) => (
 );
 
 export const PinIcon = (p: IconProps) => (
-  <svg width={p.size ?? 16} height={p.size ?? 16} viewBox="0 0 20 20" fill="var(--p600)" {...p}>
+  <svg width={p.size ?? 16} height={p.size ?? 16} viewBox="0 0 20 20" fill="var(--accent-text)" {...p}>
     <path d="M12.2 2.2l5.6 5.6-1.4 1.4-.7-.7-3.5 3.5.4 2.6-1.4 1.4-3.2-3.2L4 16.8 2.9 15.7 6.9 12 3.7 8.8l1.4-1.4 2.6.4 3.5-3.5-.7-.7 1.7-1.4z" />
   </svg>
 );
@@ -287,7 +318,7 @@ export const ChatterLogo = ({ size = 20 }: { size?: number }) => (
       d="M3 6.5A3.5 3.5 0 016.5 3h7A3.5 3.5 0 0117 6.5v4a3.5 3.5 0 01-3.5 3.5H8l-3.6 2.7c-.6.45-1.4-.02-1.4-.75V6.5z"
       fill="#fff"
     />
-    <circle cx="8" cy="8.6" r="1.1" fill="var(--p600)" />
-    <circle cx="12" cy="8.6" r="1.1" fill="var(--p600)" />
+    <circle cx="8" cy="8.6" r="1.1" fill="var(--accent-text)" />
+    <circle cx="12" cy="8.6" r="1.1" fill="var(--accent-text)" />
   </svg>
 );

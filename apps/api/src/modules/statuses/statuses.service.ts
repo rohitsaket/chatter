@@ -6,7 +6,6 @@ import { PrismaService } from "../../common/prisma.service";
 import type { AuthedUser } from "../../common/session.service";
 import { RealtimeGateway } from "../../realtime/realtime.gateway";
 import { ConversationsService } from "../conversations/conversations.service";
-import { MessagesService } from "../messages/messages.service";
 import { initials } from "../users/users.service";
 
 const statusInclude = {
@@ -23,7 +22,6 @@ export class StatusesService {
     private readonly prisma: PrismaService,
     private readonly rt: RealtimeGateway,
     private readonly conversations: ConversationsService,
-    private readonly messages: MessagesService,
   ) {}
 
   private async audienceSize(s: StatusWithRels, orgId: string): Promise<number> {
@@ -130,12 +128,11 @@ export class StatusesService {
     return this.toDto(auth, fresh);
   }
 
-  /** Reply lands as a real DM message to the status owner (prototype parity). */
-  async reply(auth: AuthedUser, statusId: string, text: string): Promise<{ conversationId: string; slug: string | null }> {
+  /** Open the DM; reply content is composed and encrypted by the chat client. */
+  async reply(auth: AuthedUser, statusId: string): Promise<{ conversationId: string; slug: string | null }> {
     const s = await this.load(auth, statusId);
     if (s.ownerId === auth.userId) throw new ForbiddenException("You cannot reply to your own status");
     const conv = await this.conversations.openDm(auth, s.ownerId);
-    await this.messages.send(auth, conv.id, { text: `↪ Replying to your status: ${text}` });
     return { conversationId: conv.id, slug: conv.slug };
   }
 

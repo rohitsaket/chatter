@@ -43,9 +43,14 @@ export function StatusModule() {
     onSuccess: () => void qc.invalidateQueries({ queryKey: ["statuses"] }),
   });
   const replyMut = useMutation({
-    mutationFn: ({ id, text }: { id: string; text: string }) =>
-      api<{ slug: string | null; conversationId: string }>(`/statuses/${id}/reply`, { method: "POST", json: { text } }),
-    onSuccess: (res) => router.push(`/app/chats/${res.slug ?? res.conversationId}`),
+    mutationFn: (id: string) =>
+      api<{ slug: string | null; conversationId: string }>(`/statuses/${id}/reply`, { method: "POST", json: {} }),
+    onSuccess: (res) => {
+      const key = res.slug ?? res.conversationId;
+      sessionStorage.setItem(`chatter-draft:${key}`, reply.trim());
+      setReply("");
+      router.push(`/app/chats/${key}`);
+    },
   });
 
   // Record the view once per shown status.
@@ -68,8 +73,7 @@ export function StatusModule() {
   function sendReply() {
     const text = reply.trim();
     if (!text || !current) return;
-    setReply("");
-    replyMut.mutate({ id: current.id, text });
+    replyMut.mutate(current.id);
   }
 
   if (isMobile === null) return null;
@@ -98,7 +102,7 @@ export function StatusModule() {
           onClick={() =>
             api("/statuses", { method: "POST", json: { caption: "Shared from Chatter web" } }).then(() => qc.invalidateQueries({ queryKey: ["statuses"] }))
           }
-          style={{ width: 36, height: 36, borderRadius: 10, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--p600)", cursor: "pointer" }}
+          style={{ width: 36, height: 36, borderRadius: 10, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-text)", cursor: "pointer" }}
         >
           <CameraIcon />
         </div>
@@ -344,7 +348,7 @@ function StatusDetails({
       <div style={cardStyle}>
         <div style={{ fontWeight: 800, fontSize: 13.5 }}>Audience</div>
         <div style={{ display: "flex", alignItems: "center", gap: 11, marginTop: 10 }}>
-          <div style={{ width: 38, height: 38, borderRadius: 11, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--p600)" }}>
+          <div style={{ width: 38, height: 38, borderRadius: 11, background: "var(--p100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--accent-text)" }}>
             <GroupsIcon size={17} />
           </div>
           <div style={{ flex: 1 }}>

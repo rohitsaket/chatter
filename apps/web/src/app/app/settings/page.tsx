@@ -2,6 +2,7 @@
 import * as React from "react";
 import { SegmentedControl, Toggle } from "@chatter/ui";
 import { useSettings, useUpdateSettings } from "@/lib/queries";
+import { api } from "@/lib/api";
 
 const NAV = [
   { name: "General", desc: "Basic preferences and startup.", icon: "⚙" },
@@ -235,7 +236,7 @@ export default function SettingsPage() {
               >
                 <span style={{ opacity: 0.8, paddingTop: 1 }}>{sn.icon}</span>
                 <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: active ? "var(--p600)" : "var(--text)" }}>{sn.name}</div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: active ? "var(--accent-text)" : "var(--text)" }}>{sn.name}</div>
                   <div style={{ fontSize: 11.5, color: "var(--text2)", marginTop: 1 }}>{sn.desc}</div>
                 </div>
               </div>
@@ -246,6 +247,8 @@ export default function SettingsPage() {
       <main style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", background: "var(--bg-subtle)" }}>
         {section === "General" ? (
           settingsBody
+        ) : section === "Devices" ? (
+          <DevicesSettings />
         ) : (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--text2)" }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: "var(--text)" }}>{section}</div>
@@ -284,3 +287,61 @@ const cardHeader: React.CSSProperties = { padding: "14px 18px", fontSize: 14, fo
 const row: React.CSSProperties = { display: "flex", alignItems: "center", padding: "14px 18px", borderBottom: "1px solid var(--border)" };
 const rowTitle: React.CSSProperties = { fontSize: 13.5, fontWeight: 700 };
 const rowDesc: React.CSSProperties = { fontSize: 12, color: "var(--text2)", marginTop: 2 };
+
+interface CryptoDeviceDto {
+  id: string;
+  name: string;
+  platform: string;
+  current: boolean;
+  registered: boolean;
+  keyFingerprint: string | null;
+  protocolVersion: string | null;
+  lastActive: string;
+  revokedAt: string | null;
+}
+
+function DevicesSettings() {
+  const [devices, setDevices] = React.useState<CryptoDeviceDto[]>([]);
+  const [error, setError] = React.useState<string | null>(null);
+  const load = React.useCallback(async () => {
+    try {
+      setDevices(await api<CryptoDeviceDto[]>("/e2ee/devices"));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load devices");
+    }
+  }, []);
+  React.useEffect(() => { void load(); }, [load]);
+
+  async function revoke(device: CryptoDeviceDto) {
+    if (!window.confirm(`Revoke ${device.name}${device.current ? " and sign out this browser" : ""}? It will stop receiving new room keys.`)) return;
+    try {
+      await api(`/e2ee/devices/${device.id}`, { method: "DELETE" });
+      if (device.current) window.location.assign("/login");
+      else await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not revoke device");
+    }
+  }
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", padding: "20px 26px" }}>
+      <div style={{ fontSize: 21, fontWeight: 800 }}>Devices</div>
+      <div style={{ fontSize: 13, color: "var(--text2)", marginTop: 4 }}>Each login has a distinct E2EE identity. Revocation also terminates that device’s JWT sessions and future key delivery.</div>
+      {error && <div style={{ marginTop: 14, color: "var(--danger)", fontSize: 12.5 }}>{error}</div>}
+      <div style={{ ...card, overflow: "hidden" }}>
+        {devices.map((device) => (
+          <div key={device.id} style={{ ...row, gap: 12 }}>
+            <span style={{ fontSize: 24 }}>💻</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={rowTitle}>{device.name} {device.current ? "· This device" : ""}</div>
+              <div style={rowDesc}>{device.registered ? `${device.protocolVersion} · keys published` : "E2EE setup pending"} · last active {new Date(device.lastActive).toLocaleString()}</div>
+              {device.keyFingerprint && <code style={{ display: "block", fontSize: 10.5, color: "var(--text3)", marginTop: 4, overflowWrap: "anywhere" }}>{device.keyFingerprint}</code>}
+            </div>
+            {device.revokedAt ? <span style={{ color: "var(--danger)", fontSize: 12 }}>Revoked</span> : <button type="button" onClick={() => void revoke(device)} style={{ border: "1px solid var(--border)", borderRadius: 9, background: "var(--bg)", color: "var(--danger)", padding: "7px 11px", cursor: "pointer" }}>Revoke</button>}
+          </div>
+        ))}
+        {!devices.length && !error && <div style={{ padding: 18, color: "var(--text3)", fontSize: 12.5 }}>No registered E2EE devices yet.</div>}
+      </div>
+    </div>
+  );
+}

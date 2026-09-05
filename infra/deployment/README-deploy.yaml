@@ -4,11 +4,14 @@
 #   api    -> NestJS API + Socket.IO (port 4000); scale horizontally —
 #             Socket.IO uses the Redis adapter so any node can serve any client
 #   worker -> BullMQ consumers; scale by queue depth
-#   postgres, redis, minio (or AWS S3), livekit (managed or self-hosted)
+#   mysql, redis, minio (or AWS S3), livekit (managed or self-hosted)
 #
 # Required production secrets:
 #   SESSION_SECRET     long random string
-#   DATABASE_URL       managed Postgres URL
+#   JWT_ACTIVE_KID     active managed signing-key identifier
+#   JWT_ACTIVE_PRIVATE_KEY  PKCS#8 RSA key injected by KMS/secret manager
+#   JWT_VERIFICATION_KEYS_JSON  active/retiring public-key metadata only
+#   DATABASE_URL       managed MySQL URL
 #   REDIS_URL          managed Redis URL
 #   S3_*               object-storage credentials (STORAGE_DRIVER=s3)
 #   LIVEKIT_*          calls remain truthfully disabled until set
@@ -16,4 +19,4 @@
 # Boot order: migrate (prisma migrate deploy) -> api -> worker -> web.
 production:
   compose_file: ../docker/docker-compose.yml
-  notes: "Set COOKIE_SECURE=true behind HTTPS."
+  notes: "Set COOKIE_SECURE=true behind HTTPS; production boot refuses ephemeral JWT keys or weak session secrets."

@@ -1,14 +1,14 @@
 /**
- * Postgres-native search helpers (initial search backend — no external engine).
+ * SQL search helpers (initial search backend — no external engine).
  * The API composes these into Prisma raw/where clauses.
  */
 
-/** Escape LIKE/ILIKE wildcards in user input. */
+/** Escape LIKE wildcards in user input. */
 export function escapeLike(input: string): string {
   return input.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
-/** Build an ILIKE pattern that matches anywhere in the value. */
+/** Build a LIKE pattern that matches anywhere in the value. */
 export function containsPattern(input: string): string {
   return `%${escapeLike(input.trim())}%`;
 }

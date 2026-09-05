@@ -1,4 +1,5 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { createHash } from "node:crypto";
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { MessageDto, Page, PollDto, SendMessageBody } from "@chatter/contracts";
 import { RT } from "@chatter/realtime";
 import { can } from "@chatter/permissions";
@@ -14,6 +15,7 @@ const messageInclude = {
   sender: true,
   replyTo: { include: { sender: true } },
   reactions: true,
+  encryption: true,
   attachments: { include: { file: true } },
   poll: { include: { options: { include: { votes: true }, orderBy: { order: "asc" as const } }, message: { include: { sender: true } } } },
 } satisfies Prisma.MessageInclude;
@@ -62,12 +64,23 @@ export class MessagesService {
       senderRole: groupRoles?.get(m.senderId) ?? null,
       mine: m.senderId === auth.userId,
       text: m.deletedAt ? null : m.text,
+      legacyPlaintext: !m.deletedAt && Boolean(m.text) && !m.encryption,
+      encryption:
+        m.deletedAt || !m.encryption
+          ? null
+          : {
+              protocolVersion: "matrix-olm-megolm.v1",
+              algorithm: "m.megolm.v1.aes-sha2",
+              ciphertext: m.encryption.encryptedPayload,
+              sessionId: m.encryption.sessionId,
+              senderDeviceId: m.encryption.senderDeviceId,
+            },
       createdAt: m.createdAt.toISOString(),
       editedAt: m.editedAt?.toISOString() ?? null,
       state: m.state,
       replyTo:
         m.replyTo && !m.replyTo.deletedAt
-          ? { id: m.replyTo.id, text: m.replyTo.text ?? "", senderName: m.replyTo.sender.name }
+          ? { id: m.replyTo.id, text: m.replyTo.text ?? "Encrypted message", senderName: m.replyTo.sender.name }
           : null,
       reactions: [...reactionMap.entries()].map(([emoji, v]) => ({ emoji, count: v.count, mine: v.mine })),
       attachments: m.attachments.map((a) => ({
@@ -75,6 +88,7 @@ export class MessagesService {
         name: a.file.name,
         type: a.file.type,
         sizeBytes: Number(a.file.sizeBytes),
+        encrypted: a.file.encrypted,
       })),
       poll,
     };
@@ -102,8 +116,13 @@ export class MessagesService {
   async list(auth: AuthedUser, idOrSlug: string, cursor?: string, limit = 50): Promise<Page<MessageDto>> {
     const conv = await this.conversations.resolve(auth, idOrSlug);
     const roles = conv.kind === "GROUP" ? await this.groupRoleLabels(conv.id) : undefined;
+    // Messages cleared by this user are hidden from them only.
+    const mine = conv.participants.find((p) => p.userId === auth.userId);
     const rows = await this.prisma.client.message.findMany({
-      where: { conversationId: conv.id },
+      where: {
+        conversationId: conv.id,
+        ...(mine?.clearedAt ? { createdAt: { gt: mine.clearedAt } } : {}),
+      },
       include: messageInclude,
       orderBy: { createdAt: "desc" },
       take: limit + 1,
@@ -119,6 +138,14 @@ export class MessagesService {
 
   async send(auth: AuthedUser, idOrSlug: string, body: SendMessageBody): Promise<MessageDto> {
     const conv = await this.conversations.resolve(auth, idOrSlug);
+    const otherUserIds = conv.participants.filter((participant) => participant.userId !== auth.userId).map((participant) => participant.userId);
+    const blocked = await this.prisma.client.contact.findFirst({
+      where: { blocked: true, OR: [
+        { ownerId: auth.userId, targetId: { in: otherUserIds } },
+        { targetId: auth.userId, ownerId: { in: otherUserIds } },
+      ] },
+    });
+    if (blocked) throw new ForbiddenException("Messaging is unavailable for this conversation");
 
     if (body.idempotencyKey) {
       const existing = await this.prisma.client.message.findFirst({
@@ -134,15 +161,60 @@ export class MessagesService {
       if (!target) throw new NotFoundException("Reply target not found in this conversation");
     }
 
+    const attachmentIds = [...new Set(body.attachmentIds ?? [])];
+    if (attachmentIds.length) {
+      const ownedEncryptedFiles = await this.prisma.client.file.count({
+        where: {
+          id: { in: attachmentIds },
+          organizationId: auth.organizationId,
+          ownerId: auth.userId,
+          encrypted: true,
+          status: "READY",
+        },
+      });
+      if (ownedEncryptedFiles !== attachmentIds.length) {
+        throw new ForbiddenException("Every attachment must be an encrypted file owned by this sender");
+      }
+    }
+
+    const ciphertextHash = createHash("sha256").update(body.encryptedEnvelope.ciphertext).digest("hex");
+    const replay = await this.prisma.client.messageEncryption.findUnique({
+      where: { senderDeviceId_ciphertextHash: { senderDeviceId: auth.deviceId, ciphertextHash } },
+      include: { message: { include: messageInclude } },
+    });
+    if (replay) {
+      if (
+        replay.message.conversationId === conv.id &&
+        replay.message.senderId === auth.userId &&
+        replay.message.idempotencyKey === body.idempotencyKey
+      ) {
+        return this.toDto(auth, replay.message);
+      }
+      throw new ConflictException("Ciphertext replay rejected");
+    }
+
     const created = await this.prisma.client.$transaction(async (tx) => {
       const m = await tx.message.create({
         data: {
           conversationId: conv.id,
           senderId: auth.userId,
-          text: body.text,
+          text: null,
           replyToId: body.replyToId,
           idempotencyKey: body.idempotencyKey,
           state: "SENT",
+          encryption: {
+            create: {
+              encryptedPayload: body.encryptedEnvelope.ciphertext,
+              protocolVersion: body.encryptedEnvelope.protocolVersion,
+              algorithm: body.encryptedEnvelope.algorithm,
+              sessionId: body.encryptedEnvelope.sessionId,
+              senderDeviceId: auth.deviceId,
+              ciphertextHash,
+            },
+          },
+          attachments: attachmentIds.length
+            ? { create: attachmentIds.map((fileId) => ({ fileId })) }
+            : undefined,
         },
         include: messageInclude,
       });
@@ -162,11 +234,26 @@ export class MessagesService {
     return dto;
   }
 
-  async edit(auth: AuthedUser, messageId: string, text: string): Promise<MessageDto> {
+  async edit(auth: AuthedUser, messageId: string, body: SendMessageBody["encryptedEnvelope"]): Promise<MessageDto> {
     const m = await this.owned(auth, messageId);
+    if (!m.encryption) throw new ForbiddenException("Legacy plaintext messages cannot be edited");
+    const ciphertextHash = createHash("sha256").update(body.ciphertext).digest("hex");
     const updated = await this.prisma.client.message.update({
       where: { id: m.id },
-      data: { text, editedAt: new Date() },
+      data: {
+        text: null,
+        editedAt: new Date(),
+        encryption: {
+          update: {
+            encryptedPayload: body.ciphertext,
+            protocolVersion: body.protocolVersion,
+            algorithm: body.algorithm,
+            sessionId: body.sessionId,
+            senderDeviceId: auth.deviceId,
+            ciphertextHash,
+          },
+        },
+      },
       include: messageInclude,
     });
     const dto = this.toDto(auth, updated);
@@ -238,7 +325,7 @@ export class MessagesService {
   private async accessible(auth: AuthedUser, messageId: string) {
     const m = await this.prisma.client.message.findUnique({
       where: { id: messageId },
-      include: { conversation: { include: { participants: true } } },
+      include: { encryption: true, conversation: { include: { participants: true } } },
     });
     if (
       !m ||
